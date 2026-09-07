@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Boltpay — Create account</title>
+        <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+          <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+            <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+            <script src="config.js"></script>
+            <script src="theme.js"></script>
+            <style>
+:root{
+  --bg:#141022; --panel:#1D1830; --panel-hi:#241C3B; --line:rgba(245,243,255,0.08);
+  --text:#F5F3FF; --text-dim:rgba(245,243,255,0.5); --text-faint:rgba(245,243,255,0.28);
+  --amber:#F5A623; --violet:#7C5CFF; --alert:#FF5C7A; --ok:#5CE0A0;
+}
+*{ margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+body{ font-family:var(--font-display,'Space Grotesk',sans-serif); background:var(--bg); color:var(--text);
+  min-height:100vh; display:flex; align-items:center; justify-content:center; padding:20px;
+  background-image: radial-gradient(circle at 15% 0%, var(--glow-a, rgba(124,92,255,0.10)), transparent 45%),
+                     radial-gradient(circle at 85% 10%, var(--glow-b, rgba(245,166,35,0.08)), transparent 40%); }
+
+.card{ background:var(--panel); border:1px solid var(--line); border-radius:20px; padding:32px 28px; width:100%; max-width:380px; }
+.mark{ width:44px; height:44px; border-radius:12px; background:linear-gradient(155deg,var(--amber),#d98a12);
+  display:flex; align-items:center; justify-content:center; margin-bottom:18px; box-shadow:0 0 18px rgba(245,166,35,0.3); }
+h1{ font-size:20px; font-weight:700; margin-bottom:4px; }
+.sub{ font-size:12px; color:var(--text-dim); margin-bottom:24px; }
+
+.field{ margin-bottom:14px; }
+.field label{ font-size:11px; color:var(--text-faint); text-transform:uppercase; letter-spacing:0.6px; font-weight:700; display:block; margin-bottom:6px; }
+.field input{ width:100%; background:var(--panel-hi); border:1px solid var(--line); color:var(--text);
+  padding:12px 14px; border-radius:10px; font-family:'Space Grotesk'; font-size:14px; outline:none; }
+.field input:focus{ border-color:var(--amber); }
+.field-hint{ font-size:11px; color:var(--text-faint); margin-top:5px; }
+
+.btn-primary{ background:var(--amber); color:#1A1206; border:none; padding:13px 20px; border-radius:10px;
+  font-weight:700; font-size:14px; cursor:pointer; width:100%; font-family:'Space Grotesk'; margin-top:4px; }
+.btn-primary:disabled{ opacity:0.6; cursor:not-allowed; }
+
+.error-msg{ color:var(--alert); font-size:12px; margin-top:12px; display:none; }
+.success-msg{ color:var(--ok); font-size:13px; margin-top:12px; display:none; line-height:1.5; }
+.footer-link{ text-align:center; margin-top:20px; font-size:13px; color:var(--text-dim); }
+.footer-link a{ color:var(--amber); text-decoration:none; font-weight:600; }
+</style>
+          </head>
+          <body>
+            <div class="card">
+              <div class="mark">
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="none">
+                  <path d="M13 2L4 14h6l-1 8 9-12h-6l1-8z" fill="#1A1206"/>
+                </svg>
+              </div>
+              <h1>Create your Boltpay account</h1>
+              <div class="sub">Start accepting Lightning payments in minutes</div>
+              <div class="field">
+                <label>Display name</label>
+                <input type="text" id="displayName" placeholder="How customers will see you">
+                </div>
+                <div class="field">
+                  <label>Email</label>
+                  <input type="email" id="email" placeholder="you@example.com" autocomplete="email">
+                  </div>
+                  <div class="field">
+                    <label>Password</label>
+                    <input type="password" id="password" placeholder="At least 8 characters" autocomplete="new-password">
+                      <div class="field-hint">Use 8+ characters — a mix of letters and numbers is safest.</div>
+                    </div>
+                    <button class="btn-primary" id="submitBtn" onclick="doRegister()">Create account</button>
+                    <div class="error-msg" id="errorMsg">
+                    </div>
+                    <div class="success-msg" id="successMsg">
+                    </div>
+                    <div class="footer-link">Already have an account? <a href="login.html">Log in</a>
+                  </div>
+                </div>
+                <script>
+window.addEventListener('DOMContentLoaded', () => { applyDomainTheme(); });
+window.addEventListener('DOMContentLoaded', async () => {
+  const { data: { session } } = await window.supabaseClient.auth.getSession();
+  if (session) window.location.href = 'dashboard.html';
+});
+
+async function doRegister(){
+  const displayName = document.getElementById('displayName').value.trim();
+  const email = document.getElementById('email').value.trim();
+  const password = document.getElementById('password').value;
+  const errEl = document.getElementById('errorMsg');
+  const okEl = document.getElementById('successMsg');
+  const btn = document.getElementById('submitBtn');
+  errEl.style.display = 'none';
+  okEl.style.display = 'none';
+
+  if (!email || !password){
+    errEl.textContent = 'Email and password are required.';
+    errEl.style.display = 'block';
+    return;
+  }
+  if (password.length < 8){
+    errEl.textContent = 'Password must be at least 8 characters.';
+    errEl.style.display = 'block';
+    return;
+  }
+
+  btn.disabled = true; btn.textContent = 'Creating account…';
+
+  const { data, error } = await window.supabaseClient.auth.signUp({
+    email, password,
+    options: { data: { display_name: displayName || undefined } },
+  });
+
+  if (error){
+    errEl.textContent = error.message;
+    errEl.style.display = 'block';
+    btn.disabled = false; btn.textContent = 'Create account';
+    return;
+  }
+
+  // If email confirmation is off, Supabase returns a live session immediately.
+  if (data.session){
+    window.location.href = 'dashboard.html';
+    return;
+  }
+
+  // Otherwise the project requires email confirmation before login.
+  okEl.textContent = 'Account created. Check your email to confirm, then log in.';
+  okEl.style.display = 'block';
+  btn.textContent = 'Account created';
+}
+</script>
+              </body>
+            </html>

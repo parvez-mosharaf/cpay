@@ -1,0 +1,12 @@
+{
+"$schema": "node_modules/wrangler/config-schema.json",
+"name": "boltpay",
+"compatibility_date": "2026-08-20",
+"observability": {
+"enabled": true
+},
+"assets": {
+"directory": "public",
+"not_found_handling": "404-page"
+}
+}

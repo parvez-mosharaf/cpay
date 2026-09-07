@@ -1,0 +1,30 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "boltpay-og-preview",
+  "main": "og-preview-worker.js",
+  "compatibility_date": "2026-08-20",
+  "observability": {
+    "enabled": true
+  }
+
+  // Routes are deliberately NOT listed here.
+  //
+  // A route ties this file to a specific hostname and zone, so every
+  // domain you add or rename means editing the repo — and a stale entry
+  // here silently stops the worker from running on that domain. Nothing
+  // else in the codebase carries a hostname any more; this was the last
+  // place.
+  //
+  // Attach the worker from the Cloudflare dashboard instead:
+  //   Workers & Pages -> boltpay-og-preview -> Settings -> Domains & Routes
+  //   -> Add route -> yourdomain.com/*   (repeat per payment domain)
+  //
+  // Routes added there are not touched by `wrangler deploy`, so deploying
+  // never removes a domain you attached.
+  //
+  // If you would rather keep them in the repo, add a "routes" array here:
+  //   "routes": [
+  //     { "pattern": "yourdomain.com/*", "zone_name": "yourdomain.com" }
+  //   ]
+  // — but then every domain change is a code change.
+}

@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Boltpay — Lightning payments for creators</title>
+        <meta name="description" content="Get paid from Cash App. Share your payment link and they pay from their Cash balance — no crypto to buy, no signup needed to pay.">
+
+        <!-- No og: tags here on purpose.
+             They need absolute URLs, and a static file cannot know which
+             of your domains it is being served from — so any value written
+             here would be a hardcoded guess that goes stale the moment you
+             add or rename a domain.
+             worker/og-preview-worker.js builds them per request from the
+             real hostname instead, for the home page exactly as it already
+             does for payment links. -->
+        <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+          <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+            <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+            <script src="config.js"></script>
+            <script src="theme.js"></script>
+            <style>
+/* Same family as the payment page and the link previews: near-black with
+   Cash App green as the single accent. --amber keeps its name so every
+   existing rule follows without being rewritten. */
+:root{
+  --bg:#0B0F0C; --panel:#131916; --panel-hi:#1A221D; --line:rgba(255,255,255,0.07);
+  --text:#F2F7F3; --text-dim:rgba(242,247,243,0.55); --text-faint:rgba(242,247,243,0.3);
+  --amber:#00D632; --violet:#00D632; --ok:#00D632; --alert:#FF5C7A;
+  --on-accent:#04240D;
+}
+*{ margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+body{ font-family:var(--font-display,'Space Grotesk',sans-serif); background:var(--bg); color:var(--text); min-height:100vh;
+  background-image: radial-gradient(circle at 15% 0%, var(--glow-a, rgba(124,92,255,0.12)), transparent 45%),
+                     radial-gradient(circle at 85% 15%, var(--glow-b, rgba(245,166,35,0.10)), transparent 42%); }
+.mono{ font-family:'JetBrains Mono',monospace; }
+
+.nav{ display:flex; align-items:center; justify-content:space-between; padding:20px 24px; max-width:1000px; margin:0 auto; }
+.nav-left{ display:flex; align-items:center; gap:10px; }
+.mark{ width:34px; height:34px; border-radius:10px; background:linear-gradient(155deg,var(--amber),#d98a12);
+  display:flex; align-items:center; justify-content:center; }
+.nav-title{ font-size:15px; font-weight:700; }
+.nav-link{ color:var(--text-dim); text-decoration:none; font-size:13px; font-weight:600; padding:9px 16px;
+  border-radius:9px; border:1px solid var(--line); }
+.nav-link.primary{ background:var(--amber); color:var(--on-accent); border-color:transparent; }
+
+.hero{ max-width:640px; margin:0 auto; padding:60px 24px 40px; text-align:center; }
+.eyebrow{ font-size:11px; letter-spacing:1.4px; text-transform:uppercase; color:var(--amber); font-weight:700; margin-bottom:16px; }
+h1{ font-size:34px; font-weight:800; line-height:1.15; letter-spacing:-0.8px; margin-bottom:16px; }
+h1 span{ color:var(--amber); }
+.hero-sub{ font-size:15px; color:var(--text-dim); line-height:1.6; margin-bottom:28px; }
+.hero-actions{ display:flex; gap:12px; justify-content:center; flex-wrap:wrap; }
+.btn-cta{ padding:13px 24px; border-radius:11px; font-weight:700; font-size:14px; text-decoration:none; font-family:'Space Grotesk'; }
+.btn-cta.primary{ background:var(--amber); color:var(--on-accent); }
+.btn-cta.secondary{ background:var(--panel); color:var(--text); border:1px solid var(--line); }
+
+.features{ max-width:920px; margin:0 auto; padding:20px 24px 70px; display:grid; grid-template-columns:1fr; gap:14px; }
+@media (min-width:720px){ .features{ grid-template-columns:repeat(3,1fr); } }
+.feature{ background:var(--panel); border:1px solid var(--line); border-radius:16px; padding:20px; }
+.feature-num{ font-family:'JetBrains Mono'; font-size:11px; color:var(--violet); font-weight:600; margin-bottom:10px; }
+.feature h3{ font-size:15px; font-weight:700; margin-bottom:8px; }
+.feature p{ font-size:13px; color:var(--text-dim); line-height:1.55; }
+
+.foot{ text-align:center; padding:20px 24px 40px; font-size:12px; color:var(--text-faint); }
+
+#redirectNotice{ display:none; position:fixed; inset:0; background:var(--bg); z-index:999;
+  align-items:center; justify-content:center; flex-direction:column; gap:16px; text-align:center; padding:20px; }
+.spinner{ width:32px; height:32px; border-radius:50%; border:3px solid var(--line); border-top-color:var(--amber);
+  animation:spin 0.8s linear infinite; }
+@keyframes spin{ to{ transform:rotate(360deg); } }
+</style>
+          </head>
+          <body>
+            <div id="redirectNotice">
+              <div class="spinner">
+              </div>
+              <div style="font-size:13px; color:var(--text-dim);">Taking you to Boltpay…</div>
+            </div>
+            <div class="nav">
+              <div class="nav-left">
+                <div class="mark">
+                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none">
+                    <path d="M13 2L4 14h6l-1 8 9-12h-6l1-8z" fill="#1A1206"/>
+                  </svg>
+                </div>
+                <div class="nav-title">Boltpay</div>
+              </div>
+              <div style="display:flex; gap:8px;">
+                <a href="login.html" class="nav-link">Log in</a>
+                <a href="register.html" class="nav-link primary">Get started</a>
+              </div>
+            </div>
+            <div class="hero">
+              <div class="eyebrow">Lightning Network payments</div>
+              <h1>Get paid instantly, <span>keep more of it</span>
+            </h1>
+            <p class="hero-sub">Boltpay gives freelancers and shop owners a payment link customers can pay in seconds — low fees, fast settlement, withdraw to bKash, Nagad, or Binance whenever you're ready.</p>
+            <div class="hero-actions">
+              <a href="register.html" class="btn-cta primary">Create your link</a>
+              <a href="login.html" class="btn-cta secondary">I already have an account</a>
+            </div>
+          </div>
+          <div class="features">
+            <div class="feature">
+              <div class="feature-num mono">01</div>
+              <h3>One link, unlimited invoices</h3>
+              <p>Generate a personal payment link and share it anywhere. Every payment becomes a tracked invoice in your dashboard.</p>
+            </div>
+            <div class="feature">
+              <div class="feature-num mono">02</div>
+              <h3>Settles in seconds</h3>
+              <p>Lightning Network confirms almost instantly — no waiting on block confirmations to know a payment landed.</p>
+            </div>
+            <div class="feature">
+              <div class="feature-num mono">03</div>
+              <h3>Cash out your way</h3>
+              <p>Request a withdrawal to bKash, Nagad, or Binance. Small amounts auto-approve; larger ones get a quick review.</p>
+            </div>
+          </div>
+          <!-- Live payments. Hidden unless an admin turns the switch on.
+               Every identifying field arrives from the server already
+               masked — see public_settled_feed(). -->
+          <div class="cash-block" id="liveBlock" style="display:none;">
+            <div class="cash-head">
+              <h2 class="cash-title">Live payments</h2>
+              <span class="cash-dot" id="liveDot">live</span>
+            </div>
+            <p class="cash-sub">Names, emails and invoice IDs are hidden. Paste an exact invoice ID or Lightning address below to see one payment in full.</p>
+            <div class="feed" id="liveList"></div>
+          </div>
+
+          <div class="cash-block">
+            <h2 class="cash-title">Check a payment</h2>
+            <p class="cash-sub">Paste the full invoice ID or Lightning address.</p>
+            <div class="lookup-row">
+              <input type="text" id="lookupInput" placeholder="Invoice ID or lnbc…" autocomplete="off" spellcheck="false">
+              <button id="lookupBtn">Check</button>
+            </div>
+            <div class="lookup-result" id="lookupResult"></div>
+          </div>
+
+          <div class="cash-block" id="supportBlock">
+            <h2 class="cash-title">Need help?</h2>
+            <div class="support-links" id="supportLinks"></div>
+          </div>
+
+          <div class="foot">© Boltpay</div>
+          <style>
+/* Home-page sections, in the same palette as the link preview image:
+   Cash App green, black cards, white pills. */
+.cash-block{
+  max-width:860px; margin:0 auto 40px; padding:28px 26px;
+  background:#00D632; border-radius:24px; color:#000;
+}
+.cash-block + .cash-block{ margin-top:-14px; }
+.cash-title{ font-size:26px; font-weight:800; letter-spacing:-0.8px; margin-bottom:6px; }
+.cash-sub{ font-size:14px; font-weight:500; color:#0A3D14; margin-bottom:18px; line-height:1.55; }
+.cash-head{ display:flex; align-items:center; justify-content:space-between; gap:12px; }
+.cash-dot{
+  background:#000; color:#00D632; border-radius:999px; padding:5px 14px;
+  font-size:11px; font-weight:800; letter-spacing:.1em; text-transform:uppercase;
+}
+.cash-dot::before{ content:''; display:inline-block; width:7px; height:7px; border-radius:50%;
+  background:#00D632; margin-right:7px; vertical-align:middle; animation:blip 1.6s infinite; }
+@keyframes blip{ 0%,100%{opacity:1} 50%{opacity:.25} }
+
+.feed{ display:flex; flex-direction:column; gap:10px; }
+.feed-row{ background:#000; border-radius:16px; padding:14px 16px; color:#fff; }
+.feed-top{ display:flex; align-items:baseline; justify-content:space-between; gap:12px; }
+.feed-amt{ font-family:'JetBrains Mono',monospace; font-size:20px; font-weight:700; color:#00D632; }
+.feed-when{ font-size:12px; color:rgba(255,255,255,.45); white-space:nowrap; }
+.feed-grid{ display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:9px 16px; margin-top:11px; padding-top:11px; border-top:1px solid rgba(255,255,255,.12); }
+.feed-label{ font-size:9px; letter-spacing:.09em; text-transform:uppercase; color:rgba(255,255,255,.35); font-weight:700; margin-bottom:2px; }
+.feed-value{ font-size:12px; font-family:'JetBrains Mono',monospace; color:rgba(255,255,255,.85); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.feed-value.hidden-val{ color:rgba(255,255,255,.4); letter-spacing:.04em; }
+.feed-cell.wide{ grid-column:1 / -1; }
+
+.lookup-row{ display:flex; gap:10px; flex-wrap:wrap; }
+.lookup-row input{ flex:1; min-width:200px; background:#000; color:#fff; border:none; border-radius:14px; padding:15px 17px; font-size:14px; font-family:inherit; outline:none; }
+.lookup-row input::placeholder{ color:rgba(255,255,255,.35); }
+.lookup-row button{ background:#000; color:#00D632; border:none; border-radius:14px; padding:15px 30px; font-size:14px; font-weight:800; cursor:pointer; font-family:inherit; }
+.lookup-row button:disabled{ opacity:.55; cursor:not-allowed; }
+.lookup-result{ margin-top:14px; display:none; }
+.lookup-result.show{ display:block; }
+
+.support-links{ display:flex; gap:12px; flex-wrap:wrap; }
+.support-links a{ background:#000; color:#fff; border-radius:999px; padding:14px 24px; font-size:14px; font-weight:700; text-decoration:none; }
+.support-links a:first-child{ background:#fff; color:#000; }
+          </style>
+          <script>
+// Domains registered as purpose='payment' exist only to host payment slugs.
+// Their root should send visitors to the primary site domain, where login
+// and registration live. Domains marked 'site' or 'both' render normally.
+async function routeRootDomain(){
+  const host = window.location.host;
+  try {
+    const { data } = await window.supabaseClient
+      .from('site_domains')
+      .select('hostname, purpose, is_primary_site, is_active')
+      .eq('is_active', true);
+
+    if (!data || !data.length) return false;
+
+    const thisDomain = data.find(d => d.hostname.toLowerCase() === host.toLowerCase());
+    if (!thisDomain || thisDomain.purpose !== 'payment') return false;
+
+    // Never match this domain as its own redirect target. The old version
+    // picked the first is_primary_site row without excluding self, so if
+    // the payment domain happened to carry that flag the check silently
+    // gave up and the marketing site rendered — which is the bug.
+    const primary = data.find(d => d.is_primary_site && d.hostname.toLowerCase() !== host.toLowerCase())
+      || data.find(d => (d.purpose === 'site' || d.purpose === 'both') && d.hostname.toLowerCase() !== host.toLowerCase());
+
+    if (!primary){
+      // Payment-only domain with nowhere to send people. Showing the full
+      // marketing site here is wrong; show a bare notice instead.
+      document.body.innerHTML = '<div style="min-height:100vh;display:flex;align-items:center;justify-content:center;text-align:center;padding:24px;font-family:system-ui;color:#a9a4c9;background:#12101f;">This domain is used for payment links only.</div>';
+      return true;
+    }
+
+    document.getElementById('redirectNotice').style.display = 'flex';
+    window.location.replace(`https://${primary.hostname}/`);
+    return true;
+  } catch (e) {
+    console.error('domain routing check failed', e);
+    return false;
+  }
+}
+
+window.addEventListener('DOMContentLoaded', async () => {
+  await applyDomainTheme();
+  const redirected = await routeRootDomain();
+  if (redirected) return;
+
+  const { data: { session } } = await window.supabaseClient.auth.getSession();
+  if (!session) return;
+  const { data: profile } = await window.supabaseClient
+    .from('profiles').select('role').eq('id', session.user.id).single();
+  window.location.href = profile?.role === 'admin' ? 'admin.html' : 'dashboard.html#income';
+});
+
+/* ============ Home page: live feed, lookup, support ============ */
+
+function esc(str){
+  return String(str ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
+function ago(ts){
+  const secs = Math.max(0, Math.floor((Date.now() - new Date(ts)) / 1000));
+  if (secs < 60) return 'just now';
+  if (secs < 3600) return Math.floor(secs/60) + 'm ago';
+  if (secs < 86400) return Math.floor(secs/3600) + 'h ago';
+  return Math.floor(secs/86400) + 'd ago';
+}
+
+async function loadHomeExtras(){
+  const { data } = await window.supabaseClient
+    .from('app_settings').select('key, value')
+    .in('key', ['public_feed_enabled', 'support_links']);
+  const settings = Object.fromEntries((data || []).map(r => [r.key, r.value]));
+
+  // Support: the email always shows. The group link only renders when set
+  // and only when it is an http(s) URL — this is a public page, so a
+  // javascript: href saved by mistake must never reach a visitor.
+  const support = settings.support_links || {};
+  const parts = [];
+  if (support.email){
+    parts.push('<a href="mailto:' + esc(support.email) + '">\u2709 ' + esc(support.email) + '</a>');
+  }
+  if (support.group_url && /^https?:\/\//i.test(support.group_url)){
+    parts.push('<a href="' + esc(support.group_url) + '" target="_blank" rel="noopener noreferrer">\uD83D\uDCAC Support group</a>');
+  }
+  if (parts.length) document.getElementById('supportLinks').innerHTML = parts.join('');
+  else document.getElementById('supportBlock').style.display = 'none';
+
+  if (settings.public_feed_enabled !== true) return;
+  await refreshFeed();
+  setInterval(refreshFeed, 20000);
+}
+
+function cell(label, value, masked, wide){
+  return '<div class="feed-cell' + (wide ? ' wide' : '') + '">' +
+    '<div class="feed-label">' + esc(label) + '</div>' +
+    '<div class="feed-value' + (masked ? ' hidden-val' : '') + '">' + esc(value || '—') + '</div></div>';
+}
+
+async function refreshFeed(){
+  const { data, error } = await window.supabaseClient
+    .rpc('public_settled_feed', { p_limit: 15 });
+  if (error) return;
+  const rows = data || [];
+  if (!rows.length) return;
+
+  document.getElementById('liveBlock').style.display = '';
+  document.getElementById('liveList').innerHTML = rows.map(function(r){
+    // The public RPC intentionally returns only amount and settlement time.
+    // Keep the public feed aligned with that privacy boundary instead of
+    // rendering empty cells for fields the backend no longer exposes.
+    return '<div class="feed-row">' +
+      '<div class="feed-top">' +
+        '<span class="feed-amt">$' + parseFloat(r.amount || 0).toFixed(2) + '</span>' +
+        '<span class="feed-when">' + esc(ago(r.settled_at)) + '</span>' +
+      '</div>' +
+      '<div class="feed-grid">' +
+        cell('Status', 'Settled', false) +
+        cell('Settled', new Date(r.settled_at).toLocaleString(), false, true) +
+      '</div></div>';
+  }).join('');
+}
+
+async function lookupPayment(){
+  const input = document.getElementById('lookupInput');
+  const out = document.getElementById('lookupResult');
+  const btn = document.getElementById('lookupBtn');
+  const ref = input.value.trim();
+
+  out.className = 'lookup-result show';
+  if (ref.length < 12){
+    out.innerHTML = '<div class="feed-row" style="color:#FF8AA0;">Paste the full invoice ID or Lightning address.</div>';
+    return;
+  }
+
+  btn.disabled = true;
+  out.innerHTML = '<div class="feed-row" style="color:rgba(255,255,255,.6);">Checking\u2026</div>';
+  try {
+    const { data, error } = await window.supabaseClient
+      .rpc('lookup_payment_status', { p_reference: ref });
+    if (error){
+      out.innerHTML = '<div class="feed-row" style="color:#FF8AA0;">' + esc(error.message) + '</div>';
+      return;
+    }
+    const r = Array.isArray(data) ? data[0] : data;
+    if (!r){
+      out.innerHTML = '<div class="feed-row" style="color:rgba(255,255,255,.6);">No payment found with that reference.</div>';
+      return;
+    }
+    // The lookup RPC returns only payment status and timestamps. The exact
+    // reference is already known to the visitor, so do not echo private
+    // creator/link data that the backend intentionally omits.
+    const colour = r.status === 'settled' ? '#00D632'
+      : (r.status === 'expired' || r.status === 'invalid') ? '#FF8AA0' : '#F5A623';
+    out.innerHTML = '<div class="feed-row">' +
+      '<div class="feed-top">' +
+        '<span class="feed-amt">$' + parseFloat(r.amount || 0).toFixed(2) + '</span>' +
+        '<span class="feed-when" style="color:' + colour + '; font-weight:700; text-transform:uppercase;">' + esc(r.status) + '</span>' +
+      '</div>' +
+      '<div class="feed-grid">' +
+        cell('Created', r.created_at ? new Date(r.created_at).toLocaleString() : null, false, true) +
+        cell('Settled', r.settled_at ? new Date(r.settled_at).toLocaleString() : null, false, true) +
+      '</div></div>';
+  } catch (e) {
+    console.error('lookup failed:', e);
+    out.innerHTML = '<div class="feed-row" style="color:#FF8AA0;">Something went wrong. Please try again.</div>';
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+document.getElementById('lookupBtn').addEventListener('click', lookupPayment);
+document.getElementById('lookupInput').addEventListener('keydown', function(e){
+  if (e.key === 'Enter') lookupPayment();
+});
+loadHomeExtras();
+</script>
+        </body>
+      </html>

