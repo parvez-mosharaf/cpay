@@ -1,0 +1,58 @@
+# Boltpay — Supabase CLI / GitHub integration config
+#
+# Without this file the GitHub integration reports "No functions to deploy"
+# even though supabase/functions/ has five of them, because it has nothing
+# telling it they exist.
+#
+# The verify_jwt values below are NOT optional. The default is true, and
+# three of these functions are called by clients that cannot present a
+# Supabase JWT:
+#
+#   btcpay-webhook  — BTCPay authenticates with an HMAC signature instead.
+#                     Its two admin routes verify an admin JWT in code.
+#   create-invoice  — paying customers have no account. Abuse is capped by
+#                     a per-link rate limit inside the function.
+#   daily-report,
+#   ledger-backup   — called by pg_cron with an x-cron-secret header.
+#                     Both fail closed if CRON_SECRET is unset.
+#
+# user-withdraw is always called by a signed-in creator, so it keeps JWT
+# verification ON.
+#
+# If you ever let the integration deploy functions WITHOUT this file, all
+# five get verify_jwt = true and every payment on the site starts failing
+# with 401.
+
+project_id = "ohwzmxwsphsfzudmlins"
+
+[functions.btcpay-webhook]
+verify_jwt = false
+
+[functions.create-invoice]
+verify_jwt = false
+
+[functions.user-withdraw]
+verify_jwt = true
+
+[functions.daily-report]
+verify_jwt = false
+
+[functions.ledger-backup]
+verify_jwt = false
+
+# Compares BTCPay's settled invoices against the Boltpay ledger. Called by
+# pg_cron with an x-cron-secret header, same as the two above, and fails
+# closed if CRON_SECRET is unset.
+[functions.reconcile]
+verify_jwt = false
+
+# Health monitor. Called by pg_cron, and optionally by an external uptime
+# monitor pointed at the same URL with the same header. Returns 503 when
+# something is wrong so a monitor can page on the status code alone.
+[functions.health]
+verify_jwt = false
+
+# Social-media crawlers cannot present a JWT, and this endpoint only ever
+# returns a picture built from a public display name.
+[functions.og-image]
+verify_jwt = false

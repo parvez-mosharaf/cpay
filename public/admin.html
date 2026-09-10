@@ -1,0 +1,2240 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Boltpay — Admin</title>
+        <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+          <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
+            <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+            <script src="config.js"></script>
+            <script src="theme.js"></script>
+            <style>
+:root{
+  /* One palette for admin, dashboard and moderator — the same near-black
+     and Cash App green as the home page and the payment card. */
+  --bg:#0B0F0C; --panel:#131916; --panel-hi:#1A221D;
+  --line:rgba(255,255,255,0.07); --line-strong:rgba(255,255,255,0.14);
+  --text:#F2F7F3; --text-dim:rgba(242,247,243,0.55); --text-faint:rgba(242,247,243,0.30);
+  --amber:#00D632; --green:#00D632; --violet:#69F28D; --ok:#00D632;
+  --alert:#FF5C7A; --warn:#F5A623;
+  --on-accent:#04240D;
+  --accent-wash:rgba(0,214,50,0.10); --accent-ring:rgba(0,214,50,0.30); --accent-deep:#04240D;
+  --green-soft:rgba(0,214,50,0.10); --violet-soft:rgba(105,242,141,0.10);
+  --alert-soft:rgba(255,92,122,0.12); --warn-soft:rgba(245,163,35,0.12);
+  --surface:#131916; --sidebar:#0B0F0C; --sidebar-hi:#1A221D;
+  --sidebar-line:rgba(255,255,255,0.06);
+  --gold:#00D632; --bronze:#69F28D;
+}
+
+/* Compact type: more rows per screen without dropping any field. */
+html{ font-size:15px; }
+*{ margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+body{ font-family:'Space Grotesk',sans-serif; background:var(--bg); color:var(--text); min-height:100vh; padding-bottom:48px; }
+.mono{ font-family:'JetBrains Mono',monospace; }
+
+#loginScreen{ min-height:100vh; display:flex; align-items:center; justify-content:center; padding:20px; }
+.login-card{ background:var(--panel); border:1px solid var(--line); border-radius:20px; padding:32px 28px; width:100%; max-width:360px; }
+.login-mark{ width:48px; height:48px; border-radius:13px; background:linear-gradient(155deg,var(--amber),#00A82A);
+  display:flex; align-items:center; justify-content:center; margin-bottom:18px; box-shadow:0 0 18px rgba(0,214,50,0.28); }
+.login-title{ font-size:19px; font-weight:700; margin-bottom:4px; }
+.login-sub{ font-size:12px; color:var(--text-dim); margin-bottom:22px; }
+.field{ margin-bottom:12px; }
+.field label{ font-size:11px; color:var(--text-faint); text-transform:uppercase; letter-spacing:0.6px; font-weight:700; display:block; margin-bottom:6px; }
+.field input{ width:100%; background:var(--panel-hi); border:1px solid var(--line); color:var(--text); padding:12px 13px;
+  border-radius:10px; font-family:'Space Grotesk'; font-size:13px; outline:none; }
+.field input:focus{ border-color:var(--amber); }
+.btn-primary{ background:var(--amber); color:var(--on-accent, #04240D); border:none; padding:13px 20px; border-radius:10px;
+  font-weight:700; font-size:13px; cursor:pointer; width:100%; font-family:'Space Grotesk'; margin-top:6px; }
+.login-error{ color:var(--alert); font-size:12px; margin-top:10px; display:none; }
+
+#appShell{ display:none; }
+.header{ display:flex; align-items:center; justify-content:space-between; padding:16px 20px;
+  position:sticky; top:0; background:rgba(11,15,12,0.90); backdrop-filter:blur(12px); z-index:100; border-bottom:1px solid var(--line); }
+.header-left{ display:flex; align-items:center; gap:12px; }
+.header-actions{ display:flex; align-items:center; gap:10px; }
+.header-status{ display:inline-flex; align-items:center; gap:3px; color:var(--ok); font-size:10px; font-weight:700; }
+.header-status .live-dot{ margin-right:1px; }
+.bolt-mark{ width:36px; height:36px; border-radius:10px; background:linear-gradient(155deg,var(--amber),#00A82A);
+  display:flex; align-items:center; justify-content:center; }
+.header-title{ font-size:15px; font-weight:700; }
+.header-sub{ font-size:11px; color:var(--text-dim); }
+.btn-logout{ background:var(--panel); border:1px solid var(--line); color:var(--text-dim); padding:8px 16px;
+  border-radius:9px; font-size:12px; font-weight:600; cursor:pointer; font-family:'Space Grotesk'; }
+.btn-logout:hover{ background:rgba(255,92,122,0.12); color:var(--alert); border-color:rgba(255,92,122,0.3); }
+
+.content{ padding:20px 18px; max-width:1100px; margin:0 auto; }
+
+.range-bar{ display:flex; gap:8px; margin-bottom:16px; flex-wrap:wrap; }
+.range-btn{ background:var(--panel); border:1px solid var(--line); color:var(--text-dim); padding:8px 14px;
+  border-radius:9px; font-size:12px; font-weight:600; cursor:pointer; font-family:'Space Grotesk'; }
+.range-btn.active{ background:rgba(0,214,50,0.10); border-color:rgba(0,214,50,0.35); color:var(--amber); }
+
+.stats-grid{ display:grid; grid-template-columns:repeat(2,1fr); gap:12px; margin-bottom:18px; }
+@media (min-width:760px){ .stats-grid{ grid-template-columns:repeat(4,1fr); gap:14px; } }
+.stat-card{ background:var(--panel); border:1px solid var(--line); border-radius:16px; padding:16px; }
+.stat-label{ font-size:10px; color:var(--text-faint); text-transform:uppercase; letter-spacing:1px; font-weight:700; margin-bottom:8px; }
+.stat-val{ font-size:20px; font-weight:700; letter-spacing:-0.5px; font-family:'JetBrains Mono'; }
+.stat-val.amber{ color:var(--amber); } .stat-val.violet{ color:var(--violet); }
+.stat-val.ok{ color:var(--ok); } .stat-val.alert{ color:var(--alert); }
+.stat-sub{ font-size:11px; color:var(--text-faint); margin-top:6px; }
+
+.tabs{ display:flex; gap:8px; margin-bottom:14px; overflow-x:auto; }
+.tab-btn{ flex-shrink:0; background:var(--panel); border:1px solid var(--line); color:var(--text-dim); padding:10px 16px;
+  border-radius:11px; font-size:13px; font-weight:600; cursor:pointer; font-family:'Space Grotesk'; display:flex; align-items:center; gap:6px; }
+.tab-btn.active{ background:rgba(0,214,50,0.10); border-color:rgba(0,214,50,0.35); color:var(--amber); }
+.tab-badge{ background:var(--alert); color:#fff; font-size:10px; font-weight:700; padding:1px 6px; border-radius:999px; display:none; }
+.tab-badge.show{ display:inline-block; }
+
+.panel{ background:var(--panel); border:1px solid var(--line); border-radius:18px; padding:18px; margin-bottom:16px; }
+.panel-head{ display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; flex-wrap:wrap; gap:8px; }
+.panel-title{ font-size:14px; font-weight:700; }
+.panel-sub{ font-size:11px; color:var(--text-faint); margin-top:2px; }
+.badge-count{ background:rgba(0,214,50,0.15); color:var(--amber); font-size:11px; font-weight:700; padding:3px 9px; border-radius:999px; }
+.live-dot{ display:inline-block; width:7px; height:7px; border-radius:50%; background:var(--ok); margin-right:6px; animation:pulseLive 1.4s infinite; }
+@keyframes pulseLive{ 0%,100%{ opacity:0.4; } 50%{ opacity:1; } }
+
+.w-row{ display:flex; gap:10px; flex-wrap:wrap; }
+.w-input{ background:var(--panel-hi); border:1px solid var(--line); color:var(--text); padding:11px 13px;
+  border-radius:10px; font-family:'Space Grotesk'; font-size:13px; outline:none; flex:1; min-width:140px; }
+.w-input:focus{ border-color:var(--amber); }
+
+.wd-row{ background:var(--panel-hi); border:1px solid var(--line); border-radius:14px; padding:14px; margin-bottom:10px; }
+.wd-top{ display:flex; justify-content:space-between; align-items:flex-start; gap:10px; flex-wrap:wrap; }
+.wd-amt{ font-size:19px; font-weight:700; font-family:'JetBrains Mono'; }
+.wd-meta{ font-size:11px; color:var(--text-faint); margin-top:3px; font-family:'JetBrains Mono'; }
+.wd-dest{ font-size:12px; color:var(--text-dim); margin-top:6px; }
+.wd-actions{ display:flex; gap:8px; margin-top:12px; flex-wrap:wrap; }
+.act-btn{ border:none; padding:9px 14px; border-radius:9px; font-size:12px; font-weight:700; cursor:pointer; font-family:'Space Grotesk'; }
+.act-approve{ background:var(--ok); color:var(--on-accent, #04240D); }
+.act-reject{ background:rgba(255,92,122,0.15); color:var(--alert); border:1px solid rgba(255,92,122,0.3); }
+.act-paid{ background:var(--violet); color:#fff; }
+.act-btn:disabled{ opacity:0.5; cursor:not-allowed; }
+
+.badge{ display:inline-flex; align-items:center; gap:5px; padding:4px 9px; border-radius:999px; font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.3px; }
+.badge.pending{ background:rgba(0,214,50,0.12); color:var(--amber); }
+.badge.new{ background:rgba(105,242,141,0.12); color:var(--violet); }
+.badge.approved{ background:rgba(105,242,141,0.12); color:var(--violet); }
+.badge.paid, .badge.settled, .badge.active{ background:rgba(0,214,50,0.12); color:var(--ok); }
+.badge.rejected, .badge.expired, .badge.invalid, .badge.inactive{ background:rgba(255,92,122,0.12); color:var(--alert); }
+.badge-dot{ width:5px; height:5px; border-radius:50%; background:currentColor; }
+.empty-state{ text-align:center; padding:30px 10px; color:var(--text-faint); font-size:13px; font-weight:500; }
+
+.settings-row{ display:flex; gap:10px; margin-bottom:12px; flex-wrap:wrap; }
+.settings-row .field{ flex:1; min-width:140px; margin-bottom:0; }
+
+.perm-grid{ display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:7px 12px; margin-top:12px; padding-top:12px; border-top:1px solid var(--line); }
+.perm-opt{ display:flex; align-items:center; gap:8px; font-size:12.5px; font-weight:600; cursor:pointer; }
+.perm-opt input{ width:16px; height:16px; accent-color:var(--amber); flex-shrink:0; }
+.toggle-row{ display:flex; align-items:center; justify-content:space-between; padding:12px 0; }
+.toggle-label{ font-size:13px; font-weight:600; }
+.toggle-sub{ font-size:11px; color:var(--text-faint); margin-top:2px; }
+.switch{ position:relative; width:46px; height:26px; flex-shrink:0; }
+.switch input{ opacity:0; width:0; height:0; }
+.slider{ position:absolute; cursor:pointer; inset:0; background:var(--panel-hi); border:1px solid var(--line); border-radius:999px; transition:.2s; }
+.slider:before{ position:absolute; content:""; height:18px; width:18px; left:3px; top:50%; transform:translateY(-50%);
+  background:var(--text-faint); border-radius:50%; transition:.2s; }
+input:checked + .slider{ background:rgba(0,214,50,0.18); border-color:rgba(0,214,50,0.4); }
+input:checked + .slider:before{ background:var(--ok); transform:translate(20px,-50%); }
+
+.link-row{ background:var(--panel-hi); border:1px solid var(--line); border-radius:14px; padding:14px; margin-bottom:10px; }
+.link-top{ display:flex; justify-content:space-between; align-items:flex-start; gap:10px; flex-wrap:wrap; }
+.link-slug{ font-size:15px; font-weight:700; font-family:'JetBrains Mono'; }
+.link-owner{ font-size:11px; color:var(--text-faint); margin-top:3px; }
+.link-stats{ font-size:11px; color:var(--text-dim); margin-top:6px; font-family:'JetBrains Mono'; }
+
+.pay-row{ background:var(--panel-hi); border:1px solid var(--line); border-radius:12px; padding:10px 12px; margin-bottom:7px; cursor:pointer; transition:border-color .15s; }
+.pay-row:hover{ border-color:rgba(255,255,255,.14); }
+/* Collapsed by default: amount + creator email + status + caret. Every
+   other field (link, method, location, invoice ids, mark controls) lives
+   in .pay-details and only appears once the row is tapped open — same
+   pattern as moderator.html's togglePayRow, so both panels behave the
+   same way and a long Transactions list fits far more rows per screen. */
+.pay-summary{ display:flex; justify-content:space-between; align-items:center; gap:12px; }
+.pay-summary-right{ display:flex; align-items:flex-start; gap:8px; flex-shrink:0; }
+.pay-caret{ font-size:18px; color:var(--text-faint); line-height:1; transition:transform .2s; margin-top:1px; }
+.pay-row.open .pay-caret{ transform:rotate(90deg); color:var(--ok); }
+.pay-details{
+  max-height:0; overflow:hidden; opacity:0;
+  transition:max-height .25s ease, opacity .2s ease, margin-top .25s ease;
+  margin-top:0;
+}
+.pay-row.open .pay-details{ max-height:900px; opacity:1; margin-top:2px; }
+.pay-row.is-marked{ border-color:rgba(0,214,50,.45); }
+.pay-top{ display:flex; justify-content:space-between; align-items:flex-start; gap:12px; }
+.pay-amt{ font-size:16px; font-weight:700; font-family:'JetBrains Mono'; line-height:1.1; }
+.pay-email{ font-size:11px; color:var(--text-dim); font-weight:600; margin-top:2px; }
+.pay-meta{ font-size:10px; color:var(--text-faint); margin-top:2px; font-family:'JetBrains Mono'; }
+.pay-actions{ display:flex; gap:5px; margin-top:8px; flex-wrap:wrap; }
+.pay-actions .act-btn{ padding:6px 12px; font-size:11px; }
+
+/* The details used to stack in one narrow column with the whole right half
+   of the card empty. auto-fit lets the browser pack as many columns as the
+   card is wide: three or four on a desktop panel, one on a phone, with no
+   breakpoints to keep in sync. */
+/* Denser than before: three or four payments now fit on one phone screen
+   instead of two, and nothing was dropped to get there — the same fields
+   are here, just at a tighter scale. */
+.pay-grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fit, minmax(108px, 1fr));
+  gap:6px 12px;
+  margin-top:8px;
+  padding-top:8px;
+  border-top:1px solid var(--line);
+}
+.pay-field{ min-width:0; }
+.pay-field-label{
+  font-size:8px; letter-spacing:.08em; text-transform:uppercase;
+  color:var(--text-faint); font-weight:700; margin-bottom:1px;
+}
+.pay-field-value{
+  font-size:11px; color:var(--text); font-family:'JetBrains Mono';
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+}
+.mark-line{ font-size:10.5px; color:var(--ok); font-weight:600; margin-top:7px; }
+/* The two invoice identifiers are long, so they get the full card width
+   instead of a 150px cell that would truncate them to nothing. */
+.pay-field.wide{ grid-column:1 / -1; }
+.pay-field-value.with-copy{ display:flex; align-items:center; gap:8px; white-space:nowrap; }
+.pay-field-value.with-copy span{ overflow:hidden; text-overflow:ellipsis; }
+.pay-field-value .ln-value{ color:var(--amber); }
+.pay-status{ display:flex; flex-direction:column; align-items:flex-end; gap:6px; }
+.toggle-row{ display:flex; align-items:center; gap:10px; font-size:14px; font-weight:600; cursor:pointer; }
+.toggle-row input{ width:18px; height:18px; accent-color:var(--amber); }
+.cost-chip{ display:inline-block; background:rgba(0,214,50,.12); color:var(--amber); border-radius:20px; padding:1px 7px; font-size:10px; font-weight:700; vertical-align:middle; }
+.assign-grid{ display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:5px 12px; margin:8px 0; padding:10px 0; border-top:1px solid var(--line); border-bottom:1px solid var(--line); }
+.assign-opt{ display:flex; align-items:center; gap:7px; font-size:12px; font-weight:600; cursor:pointer; }
+.assign-opt input{ width:15px; height:15px; accent-color:var(--amber); flex-shrink:0; }
+.pay-timer{ color:var(--amber); font-weight:700; font-size:13px; font-family:'JetBrains Mono'; }
+.pay-timer.urgent{ color:var(--alert); }
+.ledger-id{ font-size:11px; color:var(--text-dim); font-family:'JetBrains Mono'; margin-top:6px; word-break:break-all; }
+.ledger-id b{ color:var(--text-faint); font-weight:700; font-family:'Space Grotesk'; }
+.copy-mini{ background:rgba(255,255,255,0.05); border:1px solid var(--line); color:var(--ok); cursor:pointer; font-size:10px; font-weight:700; padding:2px 6px; border-radius:6px; margin-left:6px; font-family:'Space Grotesk'; }
+.copy-mini:active{ transform:scale(0.95); }
+
+.tx-timer{ font-family:'JetBrains Mono'; font-size:12px; font-weight:700; color:var(--amber); }
+.tx-timer.urgent{ color:var(--alert); }
+
+.earn-row{ display:flex; align-items:center; gap:12px; padding:10px 0; border-bottom:1px solid var(--line); }
+.earn-row:last-child{ border-bottom:none; }
+.earn-date{ font-size:12px; font-family:'JetBrains Mono'; color:var(--text-dim); width:76px; flex-shrink:0; }
+.earn-bar-wrap{ flex:1; background:var(--panel-hi); border-radius:6px; overflow:hidden; height:22px; position:relative; }
+.earn-bar{ height:100%; background:linear-gradient(90deg,var(--violet),var(--amber)); border-radius:6px; }
+.earn-amt-wrap{ width:96px; flex-shrink:0; text-align:right; }
+.earn-amt{ font-size:12px; font-family:'JetBrains Mono'; font-weight:700; }
+.earn-profit{ font-size:9.5px; color:var(--ok); font-family:'JetBrains Mono'; margin-top:1px; }
+.sync-note{ font-size:11px; color:var(--text-faint); display:flex; align-items:center; gap:6px; margin-bottom:14px; }
+
+.cust-row{ background:var(--panel-hi); border:1px solid var(--line); border-radius:14px; padding:14px; margin-bottom:9px; cursor:pointer; transition:border-color .15s; }
+.cust-row:active{ border-color:rgba(0,214,50,0.4); }
+.cust-top{ display:flex; align-items:center; gap:12px; }
+.cust-rank{ font-family:'JetBrains Mono'; font-size:13px; font-weight:700; color:var(--text-faint); width:28px; flex-shrink:0; }
+.cust-info{ flex:1; min-width:0; }
+.cust-name{ font-size:14px; font-weight:700; }
+.cust-email{ font-size:11px; color:var(--text-faint); }
+.cust-earned{ font-family:'JetBrains Mono'; font-weight:700; color:var(--ok); font-size:15px; text-align:right; }
+.cust-sub{ font-size:10px; color:var(--text-faint); text-align:right; margin-top:2px; }
+
+.detail-panel{ display:none; }
+.detail-panel.show{ display:block; }
+.detail-back{ background:none; border:none; color:var(--violet); font-size:12px; font-weight:700; cursor:pointer; margin-bottom:12px; padding:0; }
+.detail-header{ display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; flex-wrap:wrap; gap:10px; }
+.detail-name{ font-size:18px; font-weight:700; }
+.detail-email{ font-size:12px; color:var(--text-faint); }
+.detail-stats{ display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin-bottom:16px; }
+.detail-stat{ background:var(--panel-hi); border:1px solid var(--line); border-radius:12px; padding:12px; text-align:center; }
+.detail-stat-val{ font-family:'JetBrains Mono'; font-weight:700; font-size:16px; }
+.detail-stat-label{ font-size:9px; color:var(--text-faint); text-transform:uppercase; letter-spacing:0.5px; margin-top:4px; }
+.detail-section-title{ font-size:12px; font-weight:700; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.5px; margin:16px 0 10px; }
+.model-row{ display:flex; justify-content:space-between; align-items:center; background:var(--panel-hi); border:1px solid var(--line);
+  border-radius:10px; padding:10px 13px; margin-bottom:8px; font-size:12px; }
+
+.toast{ position:fixed; bottom:20px; left:50%; transform:translateX(-50%); background:var(--panel-hi);
+  border:1px solid var(--line); padding:12px 20px; border-radius:12px; font-size:13px; font-weight:600; z-index:999; display:none; }
+.toast.ok{ border-color:rgba(0,214,50,0.4); color:var(--ok); }
+.toast.err{ border-color:rgba(255,92,122,0.4); color:var(--alert); }
+.sync-pill{ display:inline-flex; align-items:center; gap:5px; margin-left:8px; padding:4px 8px; border-radius:999px; background:rgba(0,214,50,0.12); color:var(--ok); font-size:10px; font-weight:700; vertical-align:middle; }
+.sync-pill::before{ content:''; width:6px; height:6px; border-radius:50%; background:currentColor; animation:pulseLive 1.4s infinite; }
+.sync-pill.offline{ background:var(--panel-hi); color:var(--text-faint); }
+.sync-pill.offline::before{ animation:none; }
+
+/* Cash App–style polish: high-contrast actions, soft elevation, and
+   consistent feedback across the admin workspace. */
+body{ position:relative; overflow-x:hidden; }
+body::before{ content:''; position:fixed; inset:0; pointer-events:none; z-index:0; opacity:.55;
+  background:radial-gradient(circle at 50% -18%, var(--glow-a, rgba(0,214,50,.12)), transparent 42%); }
+#loginScreen,.header,.content{ position:relative; z-index:1; }
+.header{ box-shadow:0 8px 28px rgba(0,0,0,.16); }
+.bolt-mark,.login-mark{ background:linear-gradient(145deg,var(--amber),#00A82A); box-shadow:0 0 22px rgba(0,214,50,.24); }
+.btn-primary{ background:var(--amber); color:var(--on-accent,#04240D); box-shadow:0 8px 18px rgba(0,214,50,.16); transition:transform .16s ease-out, box-shadow .16s ease-out, filter .16s ease-out; }
+.btn-primary:hover{ filter:brightness(1.08); box-shadow:0 10px 24px rgba(0,214,50,.25); transform:translateY(-1px); }
+.btn-secondary,.btn-danger,.act-btn,.range-btn,.tab-btn{ transition:background .16s ease-out, border-color .16s ease-out, color .16s ease-out, transform .16s ease-out; }
+.btn-secondary:hover,.range-btn:hover,.tab-btn:hover{ background:var(--accent-wash,rgba(0,214,50,.10)); border-color:var(--accent-ring,rgba(0,214,50,.30)); color:var(--text); transform:translateY(-1px); }
+.range-btn.active,.tab-btn.active{ box-shadow:0 5px 16px rgba(0,214,50,.08); }
+.stat-card,.panel,.pay-row,.wd-row,.cust-row,.link-row{ box-shadow:0 12px 28px rgba(0,0,0,.12); }
+.stat-card{ position:relative; overflow:hidden; }
+.stat-card::after{ content:''; position:absolute; inset:0 0 auto; height:2px; background:linear-gradient(90deg,transparent,var(--amber),transparent); opacity:.7; }
+.pay-row,.wd-row,.cust-row,.link-row{ transition:border-color .16s ease-out, transform .16s ease-out, box-shadow .16s ease-out; }
+.pay-row:hover,.wd-row:hover,.cust-row:hover,.link-row:hover{ border-color:var(--accent-ring,rgba(0,214,50,.30)); box-shadow:0 8px 20px rgba(0,0,0,.11); transform:translateY(-1px); }
+.pay-row.is-marked{ box-shadow:0 0 0 1px rgba(0,214,50,.10), 0 8px 20px rgba(0,214,50,.08); }
+.pay-row.is-marked::before{ content:'CHECKED'; float:right; margin:-3px 0 0 8px; color:var(--ok); font-size:8px; font-weight:800; letter-spacing:.08em; }
+input:focus-visible,select:focus-visible,button:focus-visible{ outline:2px solid var(--amber); outline-offset:2px; }
+@media (max-width:680px){
+  .header{ padding:14px; }
+  .content{ padding:16px 12px; }
+  .panel{ padding:15px; border-radius:16px; }
+  .pay-grid{ grid-template-columns:repeat(2,minmax(0,1fr)); }
+}
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{ animation-duration:.01ms !important; transition-duration:.01ms !important; scroll-behavior:auto !important; }
+}
+
+.msg-bubble{ padding:10px 13px; border-radius:12px; margin-bottom:8px; font-size:13px; line-height:1.5; max-width:85%; }
+.msg-bubble.admin{ background:rgba(0,214,50,0.12); border:1px solid rgba(0,214,50,0.28); margin-left:auto; }
+.msg-bubble.creator{ background:var(--panel-hi); border:1px solid var(--line); }
+.msg-bubble .msg-from{ font-size:10px; font-weight:700; color:var(--violet); text-transform:uppercase; letter-spacing:0.4px; margin-bottom:3px; }
+.msg-time{ font-size:10px; color:var(--text-faint); margin-top:4px; }
+.msg-actions{ display:flex; gap:8px; margin-top:7px; }
+.msg-act{ background:none; border:none; color:var(--text-faint); cursor:pointer; font-size:11px; font-weight:600; padding:0; font-family:'Space Grotesk'; }
+.msg-act:hover{ color:var(--amber); }
+.msg-act.danger:hover{ color:var(--alert); }
+.msg-edit-input{ width:100%; background:rgba(0,0,0,0.2); border:1px solid var(--line); color:var(--text); padding:8px 10px; border-radius:8px; font-family:'Space Grotesk'; font-size:13px; outline:none; margin-bottom:6px; }
+.creator-option-unread{ font-weight:700; }
+.msg-deleted-badge { font-size: 10px; color: var(--alert); font-weight: 700; display: inline-block; margin-top: 6px; padding: 2px 6px; background: rgba(255,92,122,0.1); border-radius: 4px; }
+
+.filter-select{ background:var(--panel-hi); border:1px solid var(--line); color:var(--text-dim);
+  padding:8px 10px; border-radius:9px; font-family:'Space Grotesk'; font-size:12px; outline:none; flex:1; min-width:120px; }
+
+/* ---------- Compact scale ----------
+   Appended last so it overrides the sizes above without editing them.
+   Every field stays; only the scale tightens, so noticeably more fits on
+   one screen. */
+.stat-card{ padding:11px 12px !important; border-radius:12px !important; }
+.stat-label{ font-size:9px !important; margin-bottom:5px !important; }
+.stat-val{ font-size:17px !important; }
+.stat-sub{ font-size:10px !important; margin-top:4px !important; }
+.stats-grid{ gap:8px !important; margin-bottom:12px !important; }
+
+.panel{ padding:13px !important; margin-bottom:11px !important; border-radius:14px !important; }
+.panel-head{ margin-bottom:10px !important; }
+.panel-title{ font-size:13px !important; }
+.panel-sub{ font-size:10px !important; }
+
+.tab-btn, .nav-btn, .range-btn{ padding:7px 12px !important; font-size:12px !important; border-radius:9px !important; }
+.tabs, .section-nav, .range-bar{ gap:6px !important; margin-bottom:11px !important; }
+
+.wd-row, .link-row, .cust-row, .pay-row, .tx-row{
+  padding:10px 12px !important; margin-bottom:7px !important; border-radius:12px !important;
+}
+.wd-amt{ font-size:16px !important; }
+.wd-meta{ font-size:10px !important; }
+.wd-dest{ font-size:11px !important; margin-top:4px !important; }
+.wd-actions{ margin-top:8px !important; gap:5px !important; }
+.act-btn{ padding:6px 12px !important; font-size:11px !important; border-radius:8px !important; }
+
+.link-slug{ font-size:13px !important; }
+.link-owner{ font-size:10px !important; }
+.link-stats{ font-size:10px !important; margin-top:4px !important; }
+
+.cust-name{ font-size:13px !important; }
+.cust-email{ font-size:10px !important; }
+.cust-earned{ font-size:13px !important; }
+.cust-sub{ font-size:9px !important; }
+.cust-rank{ font-size:11px !important; width:22px !important; }
+
+.w-input, .filter-select{ padding:9px 11px !important; font-size:12px !important; border-radius:9px !important; }
+.btn-primary{ padding:10px 16px !important; font-size:12px !important; }
+.badge{ padding:3px 8px !important; font-size:9px !important; }
+.empty-state{ padding:20px 10px !important; font-size:12px !important; }
+.detail-stat{ padding:9px !important; }
+.detail-stat-val{ font-size:14px !important; }
+.detail-stat-label{ font-size:8px !important; }
+.detail-section-title{ font-size:11px !important; margin:12px 0 8px !important; }
+.header{ padding:11px 16px !important; }
+.content{ padding:14px 14px !important; }
+.msg-bubble{ padding:8px 11px !important; font-size:12px !important; margin-bottom:6px !important; }
+</style>
+          </head>
+          <body>
+            <div id="loginScreen">
+              <div class="login-card">
+                <div class="login-mark">
+                  <svg viewBox="0 0 24 24" width="20" height="20" fill="none">
+                    <path d="M13 2L4 14h6l-1 8 9-12h-6l1-8z" fill="#04240D"/>
+                  </svg>
+                </div>
+                <div class="login-title">Boltpay Admin</div>
+                <div class="login-sub">Restricted access — admin accounts only</div>
+                <div class="field">
+                  <label>Email</label>
+                  <input type="email" id="loginEmail" placeholder="admin@example.com">
+                  </div>
+                  <div class="field">
+                    <label>Password</label>
+                    <input type="password" id="loginPassword" placeholder="••••••••">
+                    </div>
+                    <button class="btn-primary" onclick="doLogin()">Secure login</button>
+                    <div class="login-error" id="loginError">
+                    </div>
+                  </div>
+                </div>
+                <div id="appShell">
+                  <div class="header">
+                    <div class="header-left">
+                      <div class="bolt-mark">
+                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none">
+                          <path d="M13 2L4 14h6l-1 8 9-12h-6l1-8z" fill="#04240D"/>
+                        </svg>
+                      </div>
+                      <div>
+                        <div class="header-title">Boltpay Admin</div>
+                        <div class="header-sub" id="adminEmail">Loading…</div>
+                      </div>
+                    </div>
+                    <div class="header-actions">
+                <span class="header-status"><span class="live-dot"></span>Live</span>
+                <button class="btn-logout" onclick="doLogout()">Log out</button>
+              </div>
+                  </div>
+                  <div class="content">
+                    <div class="range-bar">
+                      <button class="range-btn active" data-range="today" onclick="setRange('today', this)">Today</button>
+                      <button class="range-btn" data-range="7d" onclick="setRange('7d', this)">7 days</button>
+                      <button class="range-btn" data-range="30d" onclick="setRange('30d', this)">30 days</button>
+                      <button class="range-btn" data-range="all" onclick="setRange('all', this)">All time</button>
+                    </div>
+                    <div class="stats-grid">
+                      <div class="stat-card">
+                        <div class="stat-label">Total settled</div>
+                        <div class="stat-val ok" id="statSettled">$0.00</div>
+                        <div class="stat-sub" id="statPaymentCount">0 payments</div>
+                      </div>
+                      <!-- Calculated Node Balance -->
+                      <div class="stat-card">
+                        <div class="stat-label">Calculated Node Balance</div>
+                        <div class="stat-val amber" id="statNodeUsd">$0.00</div>
+                        <div class="stat-sub" style="font-family:'JetBrains Mono';">Settled + Profit Margin</div>
+                      </div>
+                      <div class="stat-card">
+                        <div class="stat-label">Total withdrawn</div>
+                        <div class="stat-val violet" id="statWithdrawn">$0.00</div>
+                        <div class="stat-sub" id="statActiveCreators">0 active creators</div>
+                      </div>
+                      <div class="stat-card">
+                        <div class="stat-label">Pending payouts</div>
+                        <div class="stat-val alert" id="statPendingAmt">$0.00</div>
+                        <div class="stat-sub" id="statPendingCount">0 requests</div>
+                      </div>
+                    </div>
+                    <div class="tabs">
+                      <button class="tab-btn active" data-tab="transactions" onclick="switchTab('transactions', this)">
+                        <span class="live-dot">
+                        </span>All Transactions</button>
+                        <button class="tab-btn" data-tab="pending" onclick="switchTab('pending', this)">Withdrawals</button>
+                        <button class="tab-btn" data-tab="customers" onclick="switchTab('customers', this)">Customers</button>
+                        <button class="tab-btn" data-tab="links" onclick="switchTab('links', this)">Links</button>
+                        <button class="tab-btn" data-tab="messages" onclick="switchTab('messages', this)">Messages <span class="tab-badge" id="msgTabBadge">0</span>
+                      </button>
+                      <button class="tab-btn" data-tab="earnings" onclick="switchTab('earnings', this)">Earnings</button>
+                      <button class="tab-btn" data-tab="shops" onclick="switchTab('shops', this)">Shops</button>
+                      <button class="tab-btn" data-tab="domains" onclick="switchTab('domains', this)">Domains</button>
+                      <button class="tab-btn" data-tab="settings" onclick="switchTab('settings', this)">Settings</button>
+                    </div>
+                    <!-- MERGED TRANSACTIONS TAB -->
+                    <div id="tab-transactions">
+                      <div class="panel">
+                        <div class="panel-head">
+                          <div class="panel-title">
+                            <span class="live-dot">
+                            </span>All payments <span class="sync-pill" id="adminLiveStatus">Connecting…</span></div>
+                            <span class="badge-count" id="paymentsCount">0</span>
+                          </div>
+                          <!-- Search and Filters -->
+                          <div class="w-row" style="margin-bottom:12px;">
+                            <input type="text" class="w-input" id="paymentSearch" placeholder="Search by invoice ID, Lightning address, email, or slug..." oninput="debounceSearch()">
+                            </div>
+                            <div class="w-row" style="margin-bottom:16px;">
+                              <select class="filter-select" id="adminTxStatusFilter" onchange="renderAllPayments()">
+                                <option value="">All Status</option>
+                                <option value="new">New</option>
+                                <option value="pending">Pending</option>
+                                <option value="settled">Settled</option>
+                                <option value="expired">Expired</option>
+                                <option value="invalid">Invalid</option>
+                              </select>
+                              <select class="filter-select" id="adminTxTimeFilter" onchange="renderAllPayments()">
+                                <option value="">All Time</option>
+                                <option value="today">Today</option>
+                                <option value="7d">7 days</option>
+                                <option value="30d">30 days</option>
+                              </select>
+                            </div>
+                            <div id="allPaymentsList">
+                              <div class="empty-state">No payments yet</div>
+                            </div>
+                            <div style="display:flex; justify-content:center; margin-top:12px;">
+                              <button class="act-btn act-approve" id="adminPayLoadMore"
+                                      style="display:none;" onclick="loadMoreAdminPayments(this)">Load more</button>
+                            </div>
+                          </div>
+                        </div>
+                        <!-- PENDING WITHDRAWALS TAB -->
+                        <div id="tab-pending" style="display:none;">
+                          <div class="panel">
+                            <div class="panel-head">
+                              <div class="panel-title">Awaiting action</div>
+                              <span class="badge-count" id="pendingCount">0</span>
+                            </div>
+                            <div id="pendingList">
+                              <div class="empty-state">No pending withdrawals</div>
+                            </div>
+                          </div>
+                          <div class="panel">
+                            <div class="panel-head">
+                              <div class="panel-title">Withdrawal history</div>
+                            </div>
+                            <div id="historyList">
+                              <div class="empty-state">No withdrawal history</div>
+                            </div>
+                          </div>
+                        </div>
+                        <!-- CUSTOMERS TAB -->
+                        <div id="tab-customers" style="display:none;">
+                          <div class="panel" id="customerListView">
+                            <div class="panel-head">
+                              <div class="panel-title">Customers — sorted by earnings</div>
+                              <span class="badge-count" id="customersCount">0</span>
+                            </div>
+                            <div class="w-row" style="margin-bottom:12px;">
+                              <input type="text" class="w-input" id="customerSearch" placeholder="Search by email, name, or model slug..." oninput="renderCustomers()">
+                              </div>
+                              <div id="customersList">
+                                <div class="empty-state">No customers yet</div>
+                              </div>
+                            </div>
+                            <div class="panel detail-panel" id="customerDetailView">
+                              <button class="detail-back" onclick="closeCustomerDetail()">← Back to customer list</button>
+                              <div class="detail-header">
+                                <div>
+                                  <div class="detail-name" id="detailName">—</div>
+                                  <div class="detail-email" id="detailEmail">—</div>
+                                </div>
+                              </div>
+                              <div class="detail-stats">
+                                <div class="detail-stat">
+                                  <div class="detail-stat-val" id="detailEarned">$0</div>
+                                  <div class="detail-stat-label">Total earned</div>
+                                </div>
+                                <div class="detail-stat">
+                                  <div class="detail-stat-val" id="detailWithdrawn">$0</div>
+                                  <div class="detail-stat-label">Total withdrawn</div>
+                                </div>
+                                <div class="detail-stat">
+                                  <div class="detail-stat-val" id="detailLinks">0</div>
+                                  <div class="detail-stat-label">Models</div>
+                                </div>
+                              </div>
+                              <div class="detail-section-title">Saved Wallets</div>
+                              <div style="background:var(--panel-hi); padding:14px; border-radius:10px; border:1px solid var(--line); margin-bottom:16px; font-size:12px; line-height:1.6;">
+                                <div style="margin-bottom:6px;">
+                                  <b>Binance ID:</b> <span id="wBinance">—</span>
+                                </div>
+                                <div style="margin-bottom:6px;">
+                                  <b>USDT (BEP20):</b> <span id="wUsdt">—</span>
+                                </div>
+                                <div style="margin-bottom:6px;">
+                                  <b>bKash:</b> <span id="wBkash">—</span>
+                                </div>
+                                <div>
+                                  <b>Nagad:</b> <span id="wNagad">—</span>
+                                </div>
+                              </div>
+                              <div class="detail-section-title">Auto-Withdraw Access</div>
+                              <div class="toggle-row" style="background:var(--panel-hi); padding:12px; border-radius:10px; border:1px solid var(--line);">
+                                <div>
+                                  <div class="toggle-label">Allow Lightning & Auto-Withdraw</div>
+                                  <div class="toggle-sub">If disabled, creator won't even see the Lightning option.</div>
+                                </div>
+                                <label class="switch">
+                                  <input type="checkbox" id="detailAutoWithdrawToggle" onchange="toggleCreatorAutoWithdraw()">
+                                    <span class="slider">
+                                    </span>
+                                  </label>
+                                </div>
+                                <div class="detail-section-title">Withdrawal fee for this creator</div>
+                                <div class="w-row">
+                                  <input type="number" step="0.1" class="w-input" id="detailFeeInput" placeholder="3.0">
+                                    <button class="btn-primary" style="flex:0 0 auto;" onclick="saveDetailFee()">Save fee %</button>
+                                  </div>
+                                  <div class="detail-section-title">Payment link limit for this creator</div>
+                                  <div class="w-row">
+                                    <input type="number" step="1" class="w-input" id="detailLimitInput" placeholder="5">
+                                      <button class="btn-primary" style="flex:0 0 auto;" onclick="saveDetailLimit()">Save limit</button>
+                                    </div>
+                                    <div class="hint" style="font-size:11px; color:var(--text-faint); margin-top:6px;">How many models/payment links this creator may create. Each link is automatically available on every active payment domain.</div>
+                                    <div class="detail-section-title">Payment cost for this creator</div>
+                                  <div class="w-row">
+                                    <select class="w-input" id="detailShopSelect"></select>
+                                    <button class="btn-primary" style="flex:0 0 auto;" onclick="saveShopLock()" id="detailShopLockBtn">Lock</button>
+                                  </div>
+                                  <div class="hint" style="font-size:11px; color:var(--text-faint); margin-top:6px;" id="detailShopLockHint">Locking moves every link this creator owns onto the chosen cost and stops them changing it. Unlocked, they pick per link themselves.</div>
+                                  <div class="detail-section-title">Models & earnings per link</div>
+                                    <div id="detailModels">
+                                      <div class="empty-state">No models</div>
+                                    </div>
+                                    <div class="detail-section-title">Withdrawal history</div>
+                                    <div id="detailWithdrawals">
+                                      <div class="empty-state">No withdrawals</div>
+                                    </div>
+                                  </div>
+                                </div>
+                                <!-- LINKS TAB -->
+                                <div id="tab-links" style="display:none;">
+                                  <div class="panel">
+                                    <div class="panel-head">
+                                      <div class="panel-title">All payment links</div>
+                                      <span class="badge-count" id="linksCount">0</span>
+                                    </div>
+                                    <div id="linksList">
+                                      <div class="empty-state">No payment links yet</div>
+                                    </div>
+                                  </div>
+                                </div>
+                                <!-- MESSAGES TAB -->
+                                <div id="tab-messages" style="display:none;">
+                                  <div class="panel">
+                                    <div class="panel-head">
+                                      <div class="panel-title">Select creator</div>
+                                    </div>
+                                    <select class="w-input" id="creatorSelect" onchange="loadThread()" style="width:100%;">
+                                    </select>
+                                    <div class="hint" style="font-size:11px; color:var(--text-faint); margin-top:8px;">🔴 = unread messages from that creator. List refreshes automatically.</div>
+                                  </div>
+                                  <div class="panel">
+                                    <div class="panel-head">
+                                      <div class="panel-title">Conversation</div>
+                                      <button class="act-btn act-reject" onclick="clearThread()">Clear history</button>
+                                    </div>
+                                    <div id="threadList" style="max-height:320px; overflow-y:auto; margin-bottom:12px;">
+                                      <div class="empty-state">Select a creator above</div>
+                                    </div>
+                                    <div class="w-row">
+                                      <input type="text" class="w-input" id="adminMsgInput" placeholder="Type a message to this creator...">
+                                      </div>
+                                      <button class="btn-primary" onclick="sendAdminMessage()" style="width:100%; margin-top:10px;">Send message</button>
+                                    </div>
+                                  </div>
+                                  <!-- EARNINGS TAB -->
+                                  <div id="tab-earnings" style="display:none;">
+                                    <div class="panel" style="background:rgba(0,214,50,0.05); border:1px solid rgba(0,214,50,0.2);">
+                                      <div style="font-size:12px; color:var(--amber); font-weight:700; text-transform:uppercase; letter-spacing:1px; margin-bottom:6px;">Total Admin Profit</div>
+                                      <div class="stat-val amber" id="earningsTabProfit">$0.00</div>
+                                      <div class="stat-sub">Based on Profit Margin formula for the selected time range.</div>
+                                    </div>
+                                    <div class="panel">
+                                      <div class="panel-head">
+                                        <div class="panel-title">Daily settled balance history</div>
+                                      </div>
+                                      <div class="sync-note">
+                                        <span class="live-dot">
+                                        </span>Auto-synced daily at 5:00 PM (Asia/Dhaka)</div>
+                                        <div id="earningsList">
+                                          <div class="empty-state">No history yet</div>
+                                        </div>
+                                      </div>
+                                    </div>
+                                    <!-- DOMAINS TAB -->
+                                    <div id="tab-domains" style="display:none;">
+                                      <div class="panel">
+                                        <div class="panel-head">
+                                          <div class="panel-title">Add a domain</div>
+                                        </div>
+                                        <div class="w-row" style="margin-bottom:10px;">
+                                          <input type="text" class="w-input" id="newDomainHost" placeholder="pay.example.com (no https://)">
+                                            <select class="w-input" id="newDomainPurpose" style="max-width:180px;">
+                                              <option value="payment">Payment links only</option>
+                                              <option value="site">Main site only</option>
+                                              <option value="both">Both</option>
+                                            </select>
+                                            <select class="w-input" id="newDomainTheme" style="max-width:230px;">
+                                              <option value="keypad">Layout: Keypad</option>
+                                              <option value="classic">Layout: Classic</option>
+                                              <option value="tile">Layout: Tile</option>
+                                            </select>
+                                          </div>
+                                          <button class="btn-primary" style="max-width:200px;" onclick="addDomain()">Add domain</button>
+                                          <div class="hint" style="font-size:11px; color:var(--text-faint); margin-top:10px; line-height:1.6;">
+                                            <b style="color:var(--text-dim);">Payment links only</b> — hosts /slug pages; its root redirects to the primary site.<br>
+                                            <b style="color:var(--text-dim);">Main site only</b> — hosts login, registration, dashboards.<br>
+                                            <b style="color:var(--text-dim);">Both</b> — does everything.<br>
+                                            <br>
+                                              Adding it here only registers it in the app. You must also attach the domain in Cloudflare (Pages custom domain + Worker route) for it to actually resolve.
+                                            </div>
+                                          </div>
+                                          <div class="panel">
+                                            <div class="panel-head">
+                                              <div class="panel-title">Registered domains</div>
+                                              <span class="badge-count" id="domainsCount">0</span>
+                                            </div>
+                                            <div id="domainsList">
+                                              <div class="empty-state">No domains registered</div>
+                                            </div>
+                                          </div>
+                                        </div>
+                                        <!-- SHOPS TAB -->
+                                        <div id="tab-shops" style="display:none;">
+                                          <div class="panel">
+                                            <div class="panel-head">
+                                              <div class="panel-title" id="shopFormTitle">Add a BTCPay shop</div>
+                                            </div>
+                                            <div style="font-size:12px; color:var(--text-dim); margin-bottom:12px; line-height:1.6;">
+                                              One BTCPay server, several stores. <b>BTCPay applies the rate itself</b>
+                                              through the store's rate spread (Store &rarr; Rates &rarr; add a percentage) &mdash;
+                                              the number here is only so this panel and the payment page can show what
+                                              the payer will be charged. Set it in BTCPay first, then mirror it here.<br><br>
+                                              The API key itself is <b>never stored here</b> &mdash; pick which Edge Function
+                                              secret holds it, and add that secret in Supabase under
+                                              Edge Functions &rarr; Secrets.<br><br>
+                                              Link styles are chosen by the creator, per link &mdash; not here. A shop is a BTCPay store and a cost; creators pick which cost each of their links runs on. Add or disable a shop and their dashboards follow immediately.
+                                            </div>
+                                            <div class="w-row" style="margin-bottom:10px;">
+                                              <input type="text" class="w-input" id="shopName" placeholder="Shop name (e.g. Standard 2%)">
+                                            </div>
+                                            <div class="w-row" style="margin-bottom:10px;">
+                                              <input type="text" class="w-input" id="shopStoreId" placeholder="BTCPay store ID">
+                                            </div>
+                                            <div class="w-row" style="margin-bottom:10px;">
+                                              <input type="number" step="0.01" min="0" max="100" class="w-input" id="shopSurcharge" placeholder="Rate the payer is charged, e.g. 2">
+                                            </div>
+                                            <div class="w-row" style="margin-bottom:10px;">
+                                              <select class="w-input" id="shopApiKeyEnv">
+                                                <option value="BTCPAY_API_KEY">API key secret: BTCPAY_API_KEY</option>
+                                                <option value="BTCPAY_API_KEY_2">API key secret: BTCPAY_API_KEY_2</option>
+                                                <option value="BTCPAY_API_KEY_3">API key secret: BTCPAY_API_KEY_3</option>
+                                                <option value="BTCPAY_API_KEY_4">API key secret: BTCPAY_API_KEY_4</option>
+                                                <option value="BTCPAY_API_KEY_5">API key secret: BTCPAY_API_KEY_5</option>
+                                              </select>
+                                            </div>
+                                            <div class="pay-actions">
+                                              <button class="act-btn act-approve" id="shopSaveBtn" onclick="saveShop(this)">Add shop</button>
+                                              <button class="act-btn act-reject" id="shopCancelBtn" style="display:none;" onclick="resetShopForm()">Cancel edit</button>
+                                            </div>
+                                          </div>
+                                          <div class="panel">
+                                            <div class="panel-head">
+                                              <div class="panel-title">Shops</div>
+                                            </div>
+                                            <div id="shopsList">
+                                              <div class="empty-state">No shops configured</div>
+                                            </div>
+                                          </div>
+                                        </div>
+                                        <!-- SETTINGS TAB -->
+                                        <div id="tab-settings" style="display:none;">
+                                          <div class="panel">
+                                            <div class="panel-head">
+                                              <div class="panel-title">Platform notice</div>
+                                            </div>
+                                            <div class="w-row" style="margin-bottom:12px;">
+                                              <input type="text" class="w-input" id="noticeInput" placeholder="Message shown on every creator's dashboard...">
+                                              </div>
+                                              <div class="toggle-row">
+                                                <div>
+                                                  <div class="toggle-label">Show notice on dashboards</div>
+                                                  <div class="toggle-sub">Appears in the balance card on every creator's dashboard.</div>
+                                                </div>
+                                                <label class="switch">
+                                                  <input type="checkbox" id="noticeActiveToggle">
+                                                    <span class="slider">
+                                                    </span>
+                                                  </label>
+                                                </div>
+                                                <button class="btn-primary" style="max-width:200px;" onclick="saveNotice()">Save notice</button>
+                                              </div>
+                                              <div class="panel">
+                                                <div class="panel-head">
+                                                  <div class="panel-title">Default fee for new creators</div>
+                                                </div>
+                                                <div class="w-row" style="margin-bottom:12px;">
+                                                  <input type="number" step="0.1" class="w-input" id="defaultFeeInput" placeholder="3.0">
+                                                  </div>
+                                                  <button class="btn-primary" style="max-width:200px;" onclick="saveDefaultFee()">Save default fee</button>
+                                                  <div class="hint" style="font-size:11px; color:var(--text-faint); margin-top:8px;">Applies to accounts created from now on. Existing creators keep their current fee — edit those individually from Customers.</div>
+                                                </div>
+                                                <div class="panel">
+                                                  <div class="panel-head">
+                                                    <div class="panel-title">Default link limit for new creators</div>
+                                                  </div>
+                                                  <div class="w-row" style="margin-bottom:12px;">
+                                                    <input type="number" step="1" min="1" max="500" class="w-input" id="defaultLinkLimitInput" placeholder="5">
+                                                  </div>
+                                                  <button class="btn-primary" style="max-width:200px;" onclick="saveDefaultLinkLimit()">Save link limit</button>
+                                                  <div class="hint" style="font-size:11px; color:var(--text-faint); margin-top:8px;">One name counts as one link even when it produces several rate variants. Applies to accounts created from now on — edit existing creators from Customers.</div>
+                                                </div>
+                                                <div class="panel">
+                                                  <div class="panel-head">
+                                                    <div class="panel-title">Platform Profit Margin</div>
+                                                  </div>
+                                                  <div class="w-row" style="margin-bottom:12px;">
+                                                    <input type="number" step="0.1" class="w-input" id="profitMarginInput" placeholder="7.7">
+                                                    </div>
+                                                    <button class="btn-primary" style="max-width:200px;" onclick="saveProfitMargin()">Save Margin %</button>
+                                                    <div class="hint" style="font-size:11px; color:var(--text-faint); margin-top:8px;">Calculates Admin Profit and Node Balance based on [{Total - (Total * Margin%)} / 2] formula.</div>
+                                                  </div>
+                                                  <div class="panel">
+                                                    <div class="panel-head">
+                                                      <div class="panel-title">Staff access</div>
+                                                    </div>
+                                                    <div style="font-size:12px; color:var(--text-dim); margin-bottom:12px; line-height:1.6;">
+                                                      A <b>moderator</b> signs in at <span class="mono">/moderator.html</span> and handles the
+                                                      creators you tick below &mdash; their payments, their details, and the "checked"
+                                                      mark. Creators you do not tick are invisible to them: the filtering is in the
+                                                      database, so an unassigned creator's payments never leave it.<br><br>
+                                                      A moderator can never change a payment's status or amount, touch a withdrawal,
+                                                      or grant staff access &mdash; those stay with you.
+                                                    </div>
+                                                    <div class="w-row" style="margin-bottom:10px;">
+                                                      <select class="w-input" id="staffCreatorSelect"></select>
+                                                      <button class="btn-primary" style="flex:0 0 auto;" onclick="grantModerator()">Make moderator</button>
+                                                    </div>
+                                                    <div id="staffList"><div class="empty-state">No staff yet</div></div>
+                                                  </div>
+
+                                                  <div class="panel">
+                                                    <div class="panel-head">
+                                                      <div class="panel-title">Global switches</div>
+                                                    </div>
+                                                    <label class="toggle-row">
+                                                      <input type="checkbox" id="globalAutoWithdraw" onchange="saveGlobalToggle('auto_withdraw_enabled', this)">
+                                                      <span>Instant Lightning payouts</span>
+                                                    </label>
+                                                    <div class="hint" style="font-size:11px; color:var(--text-faint); margin:4px 0 14px;">Master switch. Off here means no creator gets an instant payout, whatever their own profile says. On here does not enable anyone by itself &mdash; you still turn it on per creator under Customers.</div>
+                                                    <label class="toggle-row">
+                                                      <input type="checkbox" id="globalPublicFeed" onchange="saveGlobalToggle('public_feed_enabled', this)">
+                                                      <span>Live payments on the home page</span>
+                                                    </label>
+                                                    <div class="hint" style="font-size:11px; color:var(--alert); margin:4px 0 0;">This is a public revenue log. Anyone can watch the total the platform takes in. Only the amount and the time are shown &mdash; never a creator, a link or an email &mdash; but leave it off unless you want that visible.</div>
+
+                                                    <label class="toggle-row" style="margin-top:14px;">
+                                                      <input type="checkbox" id="globalHideSmall" onchange="saveGlobalToggle('hide_small_payments_enabled', this)">
+                                                      <span>Hide small settled payments from creators &amp; moderators</span>
+                                                    </label>
+                                                    <div class="hint" style="font-size:11px; color:var(--text-faint); margin:4px 0 8px;">On: a settled payment at or below the threshold disappears from the creator dashboard and the moderator panel entirely &mdash; the payment list, the settled count, "Total earned", and the daily settled figures. You still see it here, correctly, always. This never touches withdrawable balance: hidden money is exactly as real and exactly as withdrawable as before, this only controls what appears on screen.</div>
+                                                    <div class="w-row" style="max-width:200px;">
+                                                      <span style="display:flex; align-items:center; gap:8px; font-size:12px; color:var(--text-dim);">$
+                                                        <input type="number" class="w-input mono" id="hideSmallThreshold" min="0" step="0.01" style="width:100px;" placeholder="10.00">
+                                                        <button class="btn-ghost" style="padding:8px 12px; font-size:11px;" onclick="saveHideSmallThreshold()">Save</button>
+                                                      </span>
+                                                    </div>
+                                                  </div>
+
+                                                  <div class="panel">
+                                                    <div class="panel-head">
+                                                      <div class="panel-title">Support links on the home page</div>
+                                                    </div>
+                                                    <div class="w-row" style="margin-bottom:10px;">
+                                                      <input type="email" class="w-input" id="supportEmailInput" placeholder="support@example.com">
+                                                    </div>
+                                                    <div class="w-row" style="margin-bottom:12px;">
+                                                      <input type="url" class="w-input" id="supportGroupInput" placeholder="https://m.me/j/... (group invite, optional)">
+                                                    </div>
+                                                    <button class="btn-primary" style="max-width:220px;" onclick="saveSupportLinks()">Save support links</button>
+                                                    <div class="hint" style="font-size:11px; color:var(--text-faint); margin-top:8px;">The email is always shown on the home page. The group link only appears when you fill it in &mdash; clear the field to hide it.</div>
+                                                  </div>
+
+                                                  <div class="panel">
+                                                    <div class="panel-head">
+                                                      <div class="panel-title">Exchange rates</div>
+                                                    </div>
+                                                    <div class="settings-row">
+                                                      <div class="field">
+                                                        <label>Buy rate (BDT)</label>
+                                                        <input type="number" step="0.01" id="buyRate" placeholder="133.00">
+                                                        </div>
+                                                        <div class="field">
+                                                          <label>Sell rate (BDT)</label>
+                                                          <input type="number" step="0.01" id="sellRate" placeholder="133.00">
+                                                          </div>
+                                                        </div>
+                                                        <button class="btn-primary" style="max-width:200px;" onclick="saveExchangeRates()">Save rates</button>
+                                                      </div>
+                                                    </div>
+                                                  </div>
+                                                </div>
+                                                <div class="toast" id="toast">
+                                                </div>
+                                                <script>
+// ---- Robust copy for Lightning addresses: event delegation on data-copy
+document.addEventListener('click', function(e){
+  const btn = e.target.closest('[data-copy]');
+  if (!btn) return;
+  const val = btn.getAttribute('data-copy');
+  if (val){ navigator.clipboard.writeText(val); showToast('Copied', 'ok'); }
+});
+
+function escapeAttr(str){ return String(str).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function escapeHtml(str){ return String(str ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+// Every value below originates from a creator: display_name comes straight
+// from signup metadata and `destination` is a free-text withdrawal field.
+// Rendered raw into the admin panel they were a stored-XSS path straight to
+// an admin session token, which owns every payout in the system.
+function safeMethod(m){ return escapeHtml(String(m || 'unknown').toUpperCase()); }
+function safeText(v, fallback){ return escapeHtml(v == null || v === '' ? (fallback ?? '—') : v); }
+
+let currentRange = 'today';
+let currentSearchTerm = '';
+let paymentSearchTimeout = null;
+let pendingWithdrawals = [];
+let allWithdrawals = [];
+let allLinks = [];
+let allPaymentsAdmin = [];
+let allCustomers = [];
+let selectedCreatorId = null;
+let currentDetailCreatorId = null;
+let editingMessageId = null;
+let liveRefreshInterval = null;
+let liveTimerInterval = null;
+let creatorListRefreshInterval = null;
+let adminRealtimeChannel = null;
+let adminRefreshTimeout = null;
+
+
+
+/* ============ Idle session timeout ============
+   This panel can move money: mark a payment settled, approve a payout,
+   change a fee, grant staff access. A session left open on an unattended
+   laptop is the whole of that authority sitting unlocked.
+
+   Supabase tokens refresh on their own and would otherwise keep a tab
+   signed in indefinitely. Twenty minutes of no keyboard, mouse or touch
+   ends it. Any real interaction resets the clock, so this never
+   interrupts someone actually working. */
+const IDLE_LIMIT_MS = 20 * 60 * 1000;
+let idleTimer = null;
+
+function resetIdleTimer(){
+  if (idleTimer) clearTimeout(idleTimer);
+  idleTimer = setTimeout(async () => {
+    try { await window.supabaseClient.auth.signOut(); } catch (e) { /* sign out anyway */ }
+    // Reload rather than just hiding the panel: it clears every array
+    // still holding customer data in memory.
+    window.location.replace(window.location.pathname + '?timeout=1');
+  }, IDLE_LIMIT_MS);
+}
+
+['click','keydown','touchstart','scroll','mousemove'].forEach(evt =>
+  window.addEventListener(evt, resetIdleTimer, { passive: true })
+);
+resetIdleTimer();
+
+// Tell them why they are back at the login screen, rather than leaving
+// them wondering whether something broke.
+if (new URLSearchParams(window.location.search).get('timeout') === '1'){
+  window.addEventListener('DOMContentLoaded', () => {
+    const err = document.getElementById('loginError');
+    if (err){
+      err.textContent = 'Signed out after 20 minutes of inactivity.';
+      err.style.display = 'block';
+    }
+  });
+}
+
+async function doLogin(){
+  const email = document.getElementById('loginEmail').value.trim();
+  const password = document.getElementById('loginPassword').value;
+  const errEl = document.getElementById('loginError');
+  errEl.style.display = 'none';
+
+  const { data, error } = await window.supabaseClient.auth.signInWithPassword({ email, password });
+  if (error){ errEl.textContent = error.message; errEl.style.display = 'block'; return; }
+
+  const { data: profile } = await window.supabaseClient.from('profiles').select('role').eq('id', data.user.id).single();
+  if (profile?.role !== 'admin'){
+    await window.supabaseClient.auth.signOut();
+    errEl.textContent = 'This account does not have admin access.';
+    errEl.style.display = 'block'; return;
+  }
+
+  document.getElementById('adminEmail').textContent = data.user.email;
+  document.getElementById('loginScreen').style.display = 'none';
+  document.getElementById('appShell').style.display = 'block';
+  await refreshAll();
+  subscribeToAdminUpdates();
+  startAutoRefresh();
+}
+
+async function doLogout(){
+  if (adminRealtimeChannel) window.supabaseClient.removeChannel(adminRealtimeChannel);
+  if (adminRefreshTimeout) clearTimeout(adminRefreshTimeout);
+  if (liveRefreshInterval) clearInterval(liveRefreshInterval);
+  if (liveTimerInterval) clearInterval(liveTimerInterval);
+  if (creatorListRefreshInterval) clearInterval(creatorListRefreshInterval);
+  await window.supabaseClient.auth.signOut();
+  window.location.reload();
+}
+
+window.addEventListener('DOMContentLoaded', async () => {
+  await applyDomainTheme();
+  // While the session + role check is in flight, show a neutral
+  // "verifying" state instead of the login form — a signed-in admin used
+  // to see the login screen flash on every page load.
+  const loginScreen = document.getElementById('loginScreen');
+  const loginBtn = loginScreen?.querySelector('button');
+  if (loginBtn){ loginBtn.disabled = true; loginBtn.textContent = 'Verifying session…'; }
+
+  const { data: { session } } = await window.supabaseClient.auth.getSession();
+  if (session){
+    const { data: profile } = await window.supabaseClient.from('profiles').select('role').eq('id', session.user.id).single();
+    if (profile?.role === 'admin'){
+      document.getElementById('adminEmail').textContent = session.user.email;
+      loginScreen.style.display = 'none';
+      document.getElementById('appShell').style.display = 'block';
+      await refreshAll();
+      subscribeToAdminUpdates();
+      startAutoRefresh();
+      return;
+    }
+    // Signed in but not an admin: sign them out so they cannot sit on a
+    // session that the panel will never accept.
+    await window.supabaseClient.auth.signOut();
+  }
+  // No usable session — restore the login form.
+  if (loginBtn){ loginBtn.disabled = false; loginBtn.textContent = 'Secure login'; }
+});
+
+function setRange(range, btn){
+  currentRange = range;
+  document.querySelectorAll('.range-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  loadStats();
+}
+
+// A business day is the Bangladesh calendar day (UTC+6, no DST).
+//
+// This replaces the old "shift now back by 11 hours" trick. That trick
+// hard-coded an 11:00 UTC boundary, so the admin panel's idea of "today"
+// silently disagreed with daily-report, which buckets by real BD calendar
+// days (00:00–23:59 +06:00). Both now use the same definition, so the
+// Earnings tab and the stats cards can never drift apart again.
+const BD_TZ = 'Asia/Dhaka';
+const bdDayFmt = new Intl.DateTimeFormat('en-CA', { timeZone: BD_TZ, year: 'numeric', month: '2-digit', day: '2-digit' });
+
+function bdDateStr(d){ return bdDayFmt.format(d); } // YYYY-MM-DD in Dhaka
+function dayBounds(dateStr){
+  const start = new Date(`${dateStr}T00:00:00+06:00`);
+  const end = new Date(start.getTime() + 24 * 3600 * 1000 - 1);
+  return { start: start.toISOString(), end: end.toISOString() };
+}
+
+function rangeDates(){
+  const todayStr = bdDateStr(new Date());
+  if (currentRange === 'today') return dayBounds(todayStr);
+  if (currentRange === '7d' || currentRange === '30d'){
+    const days = currentRange === '7d' ? 7 : 30;
+    const first = new Date(new Date(`${todayStr}T00:00:00+06:00`).getTime() - days * 86400000);
+    return { start: dayBounds(bdDateStr(first)).start, end: dayBounds(todayStr).end };
+  }
+  return { start: null, end: null };
+}
+
+async function refreshAll(){
+  await Promise.allSettled([loadStats(), loadWithdrawals(), loadLinks(), loadAllPayments(), loadEarnings(), loadSettings(), loadCustomers(), loadCreatorList(), loadDomains()]);
+}
+
+function startAutoRefresh(){
+  if (liveRefreshInterval) clearInterval(liveRefreshInterval);
+  // Reload only the first page on the timer. Passing the interval's own
+  // argument straight into loadAllPayments would have made `append`
+  // truthy and appended a duplicate page every 15 seconds.
+  liveRefreshInterval = setInterval(() => loadAllPayments('refresh'), 15000);
+  if (liveTimerInterval) clearInterval(liveTimerInterval);
+  liveTimerInterval = setInterval(tickPaymentTimers, 1000);
+  if (creatorListRefreshInterval) clearInterval(creatorListRefreshInterval);
+  creatorListRefreshInterval = setInterval(loadCreatorList, 20000);
+}
+
+function queueAdminRefresh(){
+  clearTimeout(adminRefreshTimeout);
+  adminRefreshTimeout = setTimeout(async () => {
+    await Promise.allSettled([loadAllPayments(), loadStats(), loadWithdrawals(), loadCustomers()]);
+  }, 180);
+}
+
+function subscribeToAdminUpdates(){
+  if (adminRealtimeChannel) window.supabaseClient.removeChannel(adminRealtimeChannel);
+  adminRealtimeChannel = window.supabaseClient
+    .channel('admin-live-dashboard')
+    .on('postgres_changes', { event:'*', schema:'public', table:'payments' }, queueAdminRefresh)
+    .on('postgres_changes', { event:'*', schema:'public', table:'withdrawals' }, queueAdminRefresh)
+    .subscribe((status) => {
+      const statusEl = document.getElementById('adminLiveStatus');
+      if (!statusEl) return;
+      statusEl.textContent = status === 'SUBSCRIBED' ? 'Live' : 'Reconnecting…';
+      statusEl.classList.toggle('offline', status !== 'SUBSCRIBED');
+    });
+}
+
+async function loadStats(){
+  const { start, end } = rangeDates();
+  const { data, error } = await window.supabaseClient.rpc('admin_global_stats', { p_start: start, p_end: end });
+  if (error){ showToast('Failed to load stats: ' + error.message, 'err'); return; }
+  const row = Array.isArray(data) ? data[0] : data;
+  if (!row) return;
+  document.getElementById('statSettled').textContent = '$' + parseFloat(row.total_settled).toFixed(2);
+  document.getElementById('statPaymentCount').textContent = row.payment_count + ' payments';
+  document.getElementById('statWithdrawn').textContent = '$' + parseFloat(row.total_withdrawn).toFixed(2);
+  document.getElementById('statActiveCreators').textContent = row.active_creators + ' active creators';
+  document.getElementById('statPendingAmt').textContent = '$' + parseFloat(row.pending_withdrawals_amount).toFixed(2);
+  document.getElementById('statPendingCount').textContent = row.pending_withdrawals_count + ' requests';
+  
+  // Show profit
+  document.getElementById('earningsTabProfit').textContent = '$' + parseFloat(row.total_admin_profit).toFixed(2);
+  // Show calculated node balance
+  document.getElementById('statNodeUsd').textContent = '$' + parseFloat(row.calculated_node_balance || 0).toFixed(2);
+}
+
+async function loadWithdrawals(){
+  const { data, error } = await window.supabaseClient
+    .from('withdrawals')
+    .select('*, profiles(email, display_name)')
+    .order('requested_at', { ascending: false });
+  if (error){ showToast('Failed to load withdrawals: ' + error.message, 'err'); return; }
+  allWithdrawals = data || [];
+  pendingWithdrawals = allWithdrawals.filter(w => w.status === 'pending' || w.status === 'approved');
+  document.getElementById('pendingCount').textContent = pendingWithdrawals.length;
+  renderPending(); renderHistory();
+}
+
+async function moveLinkToShop(linkId, shopId, sel){
+  sel.disabled = true;
+  try {
+    const { error } = await window.supabaseClient
+      .rpc('admin_set_link_shop', { p_link_id: linkId, p_shop_id: shopId || null });
+    if (error) return showToast('Failed: ' + error.message, 'err');
+    // The slug is left alone on purpose — it may already be in a bio or on
+    // a printed card. Only the rate on NEW invoices changes; invoices
+    // already issued keep the store recorded on the payment row.
+    showToast('Rate changed for new invoices', 'ok');
+    loadLinks();
+  } catch (e) {
+    console.error('moveLinkToShop failed:', e);
+    showToast('Could not change the rate — see the browser console', 'err');
+  } finally {
+    sel.disabled = false;
+  }
+}
+
+async function loadLinks(){
+  // The per-link dropdown is built from allShops, which the Shops tab
+  // fills. Opening Links first would otherwise render empty selects.
+  if (!allShops.length) await loadShops();
+  const { data, error } = await window.supabaseClient.rpc('admin_list_payment_links');
+  if (error){ showToast('Failed to load links: ' + error.message, 'err'); return; }
+  allLinks = data || [];
+  document.getElementById('linksCount').textContent = allLinks.length;
+  renderLinks();
+}
+
+function debounceSearch(){
+  clearTimeout(paymentSearchTimeout);
+  paymentSearchTimeout = setTimeout(() => {
+    currentSearchTerm = document.getElementById('paymentSearch').value.trim();
+    loadAllPayments();
+  }, 350);
+}
+
+const ADMIN_PAY_PAGE = 100;
+// admin_list_payments() itself caps p_limit at 200 (0046) — a ceiling
+// this file does not control and should not silently exceed.
+const ADMIN_PAY_MAX = 200;
+let adminPayOffset = 0;
+let adminPayTotal = 0;
+
+/**
+* mode:
+*   'reset'   — first load, or a search/filter changed. Starts from
+*               page 1, ADMIN_PAY_PAGE rows.
+*   'more'    — the Load more button. Appends the next page after
+*               whatever is already loaded.
+*   'refresh' — the 15s timer. Re-fetches exactly as many rows as are
+*               already on screen (so new/updated payments show up)
+*               and REPLACES them in place, rather than resetting to
+*               page 1 and throwing away however far the admin had
+*               paged — that was the previous behaviour, and it made
+*               "Load more" pointless on any list left open a moment.
+*/
+async function loadAllPayments(mode = 'reset'){
+  const append = mode === 'more';
+  const isRefresh = mode === 'refresh';
+
+  try {
+    if (isRefresh){
+      // Re-fetch exactly as many rows as are already on screen, in
+      // ADMIN_PAY_MAX-sized chunks if that's more than one page's worth,
+      // so a refresh can never lose scroll depth no matter how far
+      // "Load more" has gone — only the target row COUNT resets to what
+      // was already loaded; nothing shrinks.
+      const target = Math.max(allPaymentsAdmin.length, ADMIN_PAY_PAGE);
+      const rows = [];
+      let total = adminPayTotal;
+      for (let offset = 0; offset < target; offset += ADMIN_PAY_MAX){
+        const { data, error } = await window.supabaseClient.rpc('admin_list_payments', {
+          p_limit: Math.min(ADMIN_PAY_MAX, target - offset),
+          p_offset: offset,
+          p_search: currentSearchTerm || null,
+        });
+        if (error) throw error;
+        const page = data || [];
+        if (page.length) total = Number(page[0].total_count || total);
+        rows.push(...page);
+        // The set genuinely shrank (rows were deleted) — stop rather
+        // than asking for offsets that no longer exist.
+        if (page.length < Math.min(ADMIN_PAY_MAX, target - offset)) break;
+      }
+      allPaymentsAdmin = rows;
+      adminPayTotal = total;
+    } else {
+      const offset = append ? adminPayOffset : 0;
+      const { data, error } = await window.supabaseClient.rpc('admin_list_payments', {
+        p_limit: ADMIN_PAY_PAGE,
+        p_offset: offset,
+        p_search: currentSearchTerm || null,
+      });
+      if (error) throw error;
+      const rows = data || [];
+      adminPayTotal = rows.length ? Number(rows[0].total_count || 0) : (append ? adminPayTotal : 0);
+      allPaymentsAdmin = append ? allPaymentsAdmin.concat(rows) : rows;
+    }
+  } catch (error) {
+    // A background refresh failing shouldn't interrupt the admin with a
+    // toast every 15 seconds; a real load (reset/more) still reports it.
+    if (!isRefresh) showToast('Failed to load payments: ' + error.message, 'err');
+    return;
+  }
+
+  adminPayOffset = allPaymentsAdmin.length;
+
+  // The badge now shows how many exist, not how many happened to load.
+  document.getElementById('paymentsCount').textContent =
+    adminPayTotal > allPaymentsAdmin.length
+      ? `${allPaymentsAdmin.length} / ${adminPayTotal}`
+      : String(allPaymentsAdmin.length);
+
+  renderAllPayments();
+  updateAdminLoadMore();
+}
+
+function updateAdminLoadMore(){
+  const btn = document.getElementById('adminPayLoadMore');
+  if (!btn) return;
+  const remaining = adminPayTotal - allPaymentsAdmin.length;
+  btn.style.display = remaining > 0 ? '' : 'none';
+  btn.textContent = `Load ${Math.min(ADMIN_PAY_PAGE, remaining)} more`;
+}
+
+async function loadMoreAdminPayments(btn){
+  btn.disabled = true;
+  try { await loadAllPayments('more'); }
+  finally { btn.disabled = false; }
+}
+
+async function loadEarnings(){
+  // Live, not the daily-report cron's daily_stats table: computed fresh
+  // from payments on every call, on the same 5pm-5pm Dhaka cycle the
+  // moderator panel uses, so it can never sit at $0.00 because a cron run
+  // was missed and never needs a backfill. ledger-backup and daily_stats
+  // are untouched and keep running for anything else that reads them.
+  const { data, error } = await window.supabaseClient.rpc('admin_daily_settled', { p_days: 14 });
+  if (error){ showToast('Failed to load earnings: ' + error.message, 'err'); return; }
+  renderEarnings(data || []);
+}
+
+async function loadCustomers(){
+  const { data, error } = await window.supabaseClient.rpc('admin_customer_directory');
+  if (error){ showToast('Failed to load customers: ' + error.message, 'err'); return; }
+  allCustomers = data || [];
+  document.getElementById('customersCount').textContent = allCustomers.length;
+  renderCustomers();
+}
+
+function renderCustomers(){
+  const c = document.getElementById('customersList');
+  const search = (document.getElementById('customerSearch')?.value || '').trim().toLowerCase();
+  let filtered = allCustomers;
+  if (search){
+    filtered = allCustomers.filter(cu => (cu.email || '').toLowerCase().includes(search) || (cu.display_name || '').toLowerCase().includes(search));
+  }
+  if (!filtered.length){ c.innerHTML = `<div class="empty-state">${allCustomers.length ? 'No matching customers' : 'No customers yet'}</div>`; return; }
+  c.innerHTML = filtered.map(cu => `
+    <div class="cust-row" onclick="openCustomerDetail('${cu.id}')">
+      <div class="cust-top">
+        <div class="cust-rank">#${cu.rn}</div>
+        <div class="cust-info">
+          <div class="cust-name">${safeText(cu.display_name || cu.email)}</div>
+          <div class="cust-email">${safeText(cu.email)}</div>
+        </div>
+        <div>
+          <div class="cust-earned">$${parseFloat(cu.total_earned).toFixed(2)}</div>
+          <div class="cust-sub">${cu.link_count}/${cu.max_links ?? 5} models · ${cu.payment_count} payments</div>
+        </div>
+      </div>
+    </div>`).join('');
+}
+
+async function openCustomerDetail(creatorId){
+  loadShopLock(creatorId);
+  const cu = allCustomers.find(c => c.id === creatorId);
+  if (!cu) return;
+  currentDetailCreatorId = creatorId;
+
+  document.getElementById('customerListView').style.display = 'none';
+  document.getElementById('customerDetailView').classList.add('show');
+  document.getElementById('detailName').textContent = cu.display_name || cu.email;
+  document.getElementById('detailEmail').textContent = cu.email;
+  document.getElementById('detailEarned').textContent = '$' + parseFloat(cu.total_earned).toFixed(2);
+  document.getElementById('detailWithdrawn').textContent = '$' + parseFloat(cu.total_withdrawn).toFixed(2);
+  document.getElementById('detailLinks').textContent = cu.link_count;
+  
+  // `!== false` treated null/undefined as enabled, so a creator who had never
+  // been granted instant Lightning showed up in the panel as already granted.
+  document.getElementById('detailAutoWithdrawToggle').checked = cu.auto_withdraw_enabled === true;
+  
+  document.getElementById('wBinance').textContent = cu.w_binance || '—';
+  document.getElementById('wUsdt').textContent = cu.w_usdt || '—';
+  document.getElementById('wBkash').textContent = cu.w_bkash || '—';
+  document.getElementById('wNagad').textContent = cu.w_nagad || '—';
+
+  const { data: profileRow } = await window.supabaseClient.from('profiles').select('withdrawal_fee_percent').eq('id', creatorId).single();
+  document.getElementById('detailFeeInput').value = profileRow?.withdrawal_fee_percent ?? 3;
+  document.getElementById('detailLimitInput').value = cu.max_links ?? 5;
+
+  const { data: models } = await window.supabaseClient.from('payment_links').select('id, slug, display_name').eq('user_id', creatorId);
+  const modelsWithEarnings = await Promise.all((models || []).map(async (m) => {
+    const { data: pays } = await window.supabaseClient.from('payments').select('amount_settled').eq('payment_link_id', m.id).eq('status', 'settled');
+    const total = (pays || []).reduce((s,p) => s + parseFloat(p.amount_settled || 0), 0);
+    return { ...m, total };
+  }));
+
+  const modelsEl = document.getElementById('detailModels');
+  modelsEl.innerHTML = modelsWithEarnings.length
+    ? modelsWithEarnings.map(m => `<div class="model-row"><span>🌎 ${safeText(m.display_name || m.slug)}</span><span class="mono" style="font-weight:700; color:var(--ok);">$${m.total.toFixed(2)}</span></div>`).join('')
+    : '<div class="empty-state">No models</div>';
+
+  const { data: wds } = await window.supabaseClient.from('withdrawals').select('*')
+    .eq('user_id', creatorId).order('requested_at', { ascending: false }).limit(200);
+  const wdEl = document.getElementById('detailWithdrawals');
+  wdEl.innerHTML = (wds && wds.length)
+    ? wds.map(w => `<div class="wd-row"><div class="wd-top"><div><div class="wd-amt">$${parseFloat(w.amount_after_fee || 0).toFixed(2)}</div><div class="wd-meta">${safeMethod(w.method)} · ${fmtDate(w.requested_at)}</div></div><span class="badge ${w.status}"><span class="badge-dot"></span>${w.status}</span></div></div>`).join('')
+    : '<div class="empty-state">No withdrawals</div>';
+}
+
+async function toggleCreatorAutoWithdraw() {
+  const isEnabled = document.getElementById('detailAutoWithdrawToggle').checked;
+  const { error } = await window.supabaseClient.rpc('admin_toggle_creator_auto', {
+    p_creator_id: currentDetailCreatorId, p_enabled: isEnabled
+  });
+  if (error) {
+    showToast('Failed to update status', 'err');
+    document.getElementById('detailAutoWithdrawToggle').checked = !isEnabled;
+  } else {
+    showToast(isEnabled ? 'Lightning enabled for this creator' : 'Lightning disabled for this creator', 'ok');
+    await loadCustomers();
+  }
+}
+
+async function saveDetailFee(){
+  const fee = parseFloat(document.getElementById('detailFeeInput').value);
+  if (isNaN(fee) || fee < 0 || fee > 50){ showToast('Enter a fee between 0-50', 'err'); return; }
+  const { error } = await window.supabaseClient.rpc('admin_update_creator_fee', { p_creator_id: currentDetailCreatorId, p_fee_percent: fee });
+  showToast(error ? 'Failed: ' + error.message : 'Fee updated', error ? 'err' : 'ok');
+  if (!error) await loadCustomers();
+}
+
+function closeCustomerDetail(){
+  document.getElementById('customerDetailView').classList.remove('show');
+  document.getElementById('customerListView').style.display = 'block';
+}
+
+function fmtDate(str){ return new Date(str).toLocaleString([], { month:'short', day:'numeric', hour:'2-digit', minute:'2-digit' }); }
+
+function renderPending(){
+  const c = document.getElementById('pendingList');
+  if (!pendingWithdrawals.length){ c.innerHTML = '<div class="empty-state">No pending withdrawals</div>'; return; }
+  c.innerHTML = pendingWithdrawals.map(w => {
+    const who = w.profiles?.display_name || w.profiles?.email || w.user_id;
+    let actions = '';
+    if (w.status === 'pending'){
+      actions = `
+        <button class="act-btn act-approve" onclick="handleAction('${escapeAttr(w.id)}','${w.method === 'lightning' ? 'approve' : 'mark_paid_manual'}',this)">
+          ${w.method === 'lightning' ? 'Force BTCPay Payout' : 'Mark Paid'}
+        </button>
+        <button class="act-btn act-reject" onclick="handleAction('${w.id}','reject',this)">Reject</button>`;
+    } else if (w.status === 'approved'){
+      actions = `<button class="act-btn act-paid" onclick="handleAction('${w.id}','mark_paid_manual',this)">Mark paid (sent manually)</button>`;
+    }
+    return `
+      <div class="wd-row">
+        <div class="wd-top">
+          <div>
+            <div class="wd-amt">$${parseFloat(w.amount_requested).toFixed(2)} <span style="font-size:12px;color:var(--text-faint);">→ $${parseFloat(w.amount_after_fee).toFixed(2)} after fee</span></div>
+            <div class="wd-meta">${safeText(who)} · ${safeMethod(w.method)} · ${fmtDate(w.requested_at)}</div>
+            <div class="wd-dest" style="font-family:'JetBrains Mono'; color:var(--amber); font-weight:700;">${escapeHtml(w.destination)}</div>
+          </div>
+          <span class="badge ${w.status}"><span class="badge-dot"></span>${w.status}</span>
+        </div>
+        <div class="wd-actions">${actions}</div>
+      </div>`;
+  }).join('');
+}
+
+function renderHistory(){
+  const c = document.getElementById('historyList');
+  if (!allWithdrawals.length){ c.innerHTML = '<div class="empty-state">No withdrawal history</div>'; return; }
+  c.innerHTML = allWithdrawals.map(w => {
+    const who = w.profiles?.display_name || w.profiles?.email || w.user_id;
+    return `
+      <div class="wd-row">
+        <div class="wd-top">
+          <div>
+            <div class="wd-amt">$${parseFloat(w.amount_after_fee || 0).toFixed(2)}</div>
+            <div class="wd-meta">${safeText(who)} · ${safeMethod(w.method)} · ${fmtDate(w.requested_at)}</div>
+          </div>
+          <span class="badge ${escapeAttr(w.status)}"><span class="badge-dot"></span>${w.status}</span>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+function renderLinks(){
+  const c = document.getElementById('linksList');
+  if (!allLinks.length){ c.innerHTML = '<div class="empty-state">No payment links yet</div>'; return; }
+  c.innerHTML = allLinks.map(l => `
+    <div class="link-row">
+      <div class="link-top">
+        <div>
+          <div class="link-slug">🌎 ${safeText(l.slug)}</div>
+          <div class="link-owner">${safeText(l.owner_email)}</div>
+          <div class="link-stats">${l.shop_name
+            ? escapeHtml(l.shop_name) + ' · ' + (parseFloat(l.surcharge_percent) === 0 ? 'no extra cost' : 'payer +' + parseFloat(l.surcharge_percent) + '%')
+            : '<span style="color:var(--alert);">no shop — invoices will fail</span>'}</div>
+          <div class="link-stats">$${parseFloat(l.total_earned).toFixed(2)} earned · ${l.payment_count} payments</div>
+        </div>
+        <span class="badge ${l.is_active ? 'active' : 'inactive'}"><span class="badge-dot"></span>${l.is_active ? 'active' : 'disabled'}</span>
+      </div>
+      <div class="w-row" style="margin-top:10px;">
+        <select class="w-input" onchange="moveLinkToShop('${escapeAttr(l.id)}', this.value, this)">
+          ${allShops.filter(sh => sh.is_active || sh.id === l.shop_id).map(sh =>
+            `<option value="${escapeAttr(sh.id)}" ${sh.id === l.shop_id ? 'selected' : ''}>${escapeHtml(sh.name)} — ${parseFloat(sh.surcharge_percent) === 0 ? 'no extra cost' : 'payer +' + parseFloat(sh.surcharge_percent) + '%'}</option>`
+          ).join('')}
+        </select>
+      </div>
+      <div class="pay-actions">
+        <button class="act-btn act-reject" onclick="deleteLink('${escapeAttr(l.id)}', '${escapeAttr(l.slug)}', this)">Delete</button>
+        <button class="act-btn ${l.is_active ? 'act-reject' : 'act-approve'}" onclick="toggleLink('${escapeAttr(l.id)}', ${!l.is_active}, this)">
+          ${l.is_active ? 'Disable link' : 'Enable link'}
+        </button>
+      </div>
+    </div>`).join('');
+}
+
+async function deleteLink(id, slug, btn){
+  // Ask how much history is attached before touching anything.
+  // payments.payment_link_id is `on delete set null`, so no money
+  // disappears — but those payments lose the slug they arrived on, and an
+  // admin should know that before, not after.
+  const { data: count, error: countErr } = await window.supabaseClient
+    .rpc('admin_link_payment_count', { p_link_id: id });
+  if (countErr) return showToast('Failed: ' + countErr.message, 'err');
+
+  const n = Number(count || 0);
+  // Deletion is soft: the link row survives (marked deleted, its slug
+  // freed for reuse), so every payment through it keeps showing which
+  // link it came from. The warning reflects that rather than the old
+  // hard-delete behaviour.
+  const warning = n > 0
+    ? `\n\n${n} payment${n === 1 ? '' : 's'} came through this link. Their amount, status, creator and link name are all unaffected \u2014 only the /${slug} name itself becomes available for a new link.\n\nIf you only want to stop new payments, use Disable instead.`
+    : '';
+  if (!confirm(`Delete /${slug}?${warning}`)) return;
+
+  btn.disabled = true;
+  try {
+    const { error } = await window.supabaseClient.rpc('admin_delete_link', { p_link_id: id });
+    if (error) return showToast('Failed: ' + error.message, 'err');
+    showToast(`/${slug} deleted`, 'ok');
+    loadLinks();
+  } catch (e) {
+    console.error('deleteLink failed:', e);
+    showToast('Could not delete the link — see the browser console', 'err');
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function toggleLink(linkId, newState, btnEl){
+  btnEl.disabled = true;
+  const { error } = await window.supabaseClient.rpc('admin_toggle_link', { p_link_id: linkId, p_is_active: newState });
+  if (error){ showToast('Failed: ' + error.message, 'err'); btnEl.disabled = false; return; }
+  showToast(newState ? 'Link enabled' : 'Link disabled', 'ok');
+  await loadLinks();
+}
+
+function withinTimeFilter(createdAt, filter){
+  if (!filter) return true;
+  const created = new Date(createdAt); const now = new Date();
+  if (filter === 'today') return created.toDateString() === now.toDateString();
+  if (filter === '7d'){ const s = new Date(now); s.setDate(s.getDate()-7); return created >= s; }
+  if (filter === '30d'){ const s = new Date(now); s.setDate(s.getDate()-30); return created >= s; }
+  return true;
+}
+
+function renderAllPayments(){
+  const c = document.getElementById('allPaymentsList');
+  const search = (document.getElementById('paymentSearch')?.value || '').trim().toLowerCase();
+  const statusFilter = document.getElementById('adminTxStatusFilter')?.value || '';
+  const timeFilter = document.getElementById('adminTxTimeFilter')?.value || '';
+
+  const filtered = allPaymentsAdmin.filter(p => {
+    if (statusFilter && p.status !== statusFilter) return false;
+    if (!withinTimeFilter(p.created_at, timeFilter)) return false;
+    if (search){
+      const ln = (p.lightning_invoice || '').toLowerCase(); const inv = (p.btcpay_invoice_id || '').toLowerCase();
+      if (!ln.includes(search) && !inv.includes(search) && !(p.creator_email||'').toLowerCase().includes(search) && !(p.link_slug||'').toLowerCase().includes(search)) return false;
+    }
+    return true;
+  });
+
+  if (!filtered.length){ c.innerHTML = `<div class="empty-state">${allPaymentsAdmin.length ? 'No matching payments found' : 'No payments yet'}</div>`; return; }
+  c.innerHTML = filtered.map(p => {
+    let actions = '';
+    if (p.status === 'new' || p.status === 'pending'){
+      actions = `<button class="act-btn act-approve" onclick="markPayment('${escapeAttr(p.id)}','settled',this)">Approve</button>
+                 <button class="act-btn act-reject" onclick="markPayment('${escapeAttr(p.id)}','expired',this)">Mark expired</button>`;
+    }
+    const inv = p.btcpay_invoice_id || '\u2014';
+    const shortInv = inv.length > 15 ? inv.slice(0, 8) + '...' + inv.slice(-7) : inv;
+    const ln = p.lightning_invoice || '';
+    const shortLn = ln.length > 25 ? ln.slice(0, 16) + '...' + ln.slice(-10) : ln;
+    const location = [p.customer_city, p.customer_country].filter(Boolean).join(', ') || 'Unknown location';
+
+    const timerBlock = (p.status === 'new' || p.status === 'pending')
+      ? `<div class="pay-timer mono" data-timer>--:--</div>`
+      : '';
+
+    const settledAtField = (p.settled_at && p.status === 'settled')
+      ? `<div class="pay-field">
+           <div class="pay-field-label">Settled at</div>
+           <div class="pay-field-value">${fmtDate(p.settled_at)}</div>
+         </div>`
+      : '';
+
+    const settledField = (p.amount_settled != null && p.status === 'settled')
+      ? `<div class="pay-field">
+           <div class="pay-field-label">Amount settled</div>
+           <div class="pay-field-value" style="color:var(--ok);">$${parseFloat(p.amount_settled).toFixed(2)}</div>
+         </div>`
+      : '';
+
+    const marked = !!p.marked_at;
+    const markLine = marked
+      ? `<div class="mark-line">&#10003; Checked by ${safeText(p.marked_by_name, 'staff')} &middot; ${fmtDate(p.marked_at)}${p.mark_note ? ' &mdash; ' + escapeHtml(p.mark_note) : ''}</div>`
+      : '';
+    const markBtn = p.status === 'settled'
+      ? (marked
+          ? `<button class="act-btn act-reject" onclick="unmarkPayment('${escapeAttr(p.id)}', this)">Remove mark</button>`
+          : `<button class="act-btn act-approve" onclick="markChecked('${escapeAttr(p.id)}', this)">Mark checked</button>`)
+      : '';
+
+    // Every field that used to render open on the card now lives inside
+    // .pay-details, collapsed by default — same pattern as moderator.html's
+    // togglePayRow. Nothing was removed, it is all still one tap away.
+    const detailsInner = `
+      <div class="pay-grid">
+        <div class="pay-field">
+          <div class="pay-field-label">Link &amp; payer cost</div>
+          <div class="pay-field-value">\ud83c\udf0e ${safeText(p.link_slug)}${p.surcharge_percent != null ? ` <span class="cost-chip">${parseFloat(p.surcharge_percent)}%</span>` : ''}</div>
+        </div>
+        <div class="pay-field">
+          <div class="pay-field-label">Method</div>
+          <div class="pay-field-value">${safeMethod(p.method)}</div>
+        </div>
+        <div class="pay-field">
+          <div class="pay-field-label">Created</div>
+          <div class="pay-field-value">${fmtDate(p.created_at)}</div>
+        </div>
+        <div class="pay-field">
+          <div class="pay-field-label">Location</div>
+          <div class="pay-field-value">\ud83d\udccd ${escapeHtml(location)}</div>
+        </div>
+        ${settledField}
+        ${settledAtField}
+        <div class="pay-field wide">
+          <div class="pay-field-label">Invoice ID</div>
+          <div class="pay-field-value with-copy">
+            <span>${escapeHtml(shortInv)}</span>
+            ${inv !== '\u2014' ? `<button class="copy-mini" data-copy="${escapeAttr(inv)}">copy</button>` : ''}
+          </div>
+        </div>
+        ${ln ? `<div class="pay-field wide">
+          <div class="pay-field-label">Lightning invoice</div>
+          <div class="pay-field-value with-copy">
+            <span class="ln-value">${escapeHtml(shortLn)}</span>
+            <button class="copy-mini" data-copy="${escapeAttr(ln)}">copy</button>
+          </div>
+        </div>` : ''}
+      </div>
+      ${markLine}
+      ${(actions || markBtn) ? `<div class="pay-actions">${actions}${markBtn}</div>` : ''}`;
+
+    // Collapsed summary: amount + creator email + status badge + caret.
+    // onclick toggles .open on the row itself; a tap that starts on a
+    // button (Approve, copy, Mark checked...) is ignored by
+    // togglePayRow() so those still work without collapsing the row
+    // they live in.
+    return `
+      <div class="pay-row${marked ? ' is-marked' : ''}" ${(p.status === 'new' || p.status === 'pending') && p.expires_at ? `data-expires="${escapeAttr(p.expires_at)}"` : ''} onclick="togglePayRow(this, event)">
+        <div class="pay-summary">
+          <div style="min-width:0;">
+            <div class="pay-amt">$${parseFloat(p.amount_requested).toFixed(2)}</div>
+            <div class="pay-email">${safeText(p.creator_email)}</div>
+          </div>
+          <div class="pay-summary-right">
+            <div class="pay-status">
+              <span class="badge ${escapeAttr(p.status)}"><span class="badge-dot"></span>${escapeHtml(p.status)}</span>
+              ${timerBlock}
+            </div>
+            <div class="pay-caret">\u203a</div>
+          </div>
+        </div>
+        <div class="pay-details">${detailsInner}</div>
+      </div>`;
+  }).join('');
+  tickPaymentTimers();
+}
+
+// Tap the summary to expand/collapse. Ignores taps that started inside a
+// button or the copy-mini chip, so Approve / Mark checked / copy still
+// work without also collapsing the row they live in.
+function togglePayRow(row, ev){
+  if (ev.target.closest('button')) return;
+  row.classList.toggle('open');
+}
+
+async function markChecked(paymentId, btn){
+  const note = prompt('Note for the creator (optional):') ?? '';
+  btn.disabled = true;
+  try {
+    const { error } = await window.supabaseClient
+      .rpc('mark_payment', { p_payment_id: paymentId, p_note: note.trim() || null });
+    if (error) return showToast('Failed: ' + error.message, 'err');
+    showToast('Marked as checked', 'ok');
+    loadAllPayments();
+  } finally { btn.disabled = false; }
+}
+
+async function unmarkPayment(paymentId, btn){
+  btn.disabled = true;
+  try {
+    const { error } = await window.supabaseClient
+      .rpc('unmark_payment', { p_payment_id: paymentId });
+    if (error) return showToast('Failed: ' + error.message, 'err');
+    showToast('Mark removed', 'ok');
+    loadAllPayments();
+  } finally { btn.disabled = false; }
+}
+
+async function markPayment(paymentId, status, btnEl){
+  btnEl.disabled = true;
+  if (status === 'settled'){
+    const { data: { session } } = await window.supabaseClient.auth.getSession();
+    try {
+      const res = await fetch(`${window.SUPABASE_URL}/functions/v1/btcpay-webhook/admin-mark-settled`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session.access_token}` },
+        body: JSON.stringify({ paymentId }),
+      });
+      const result = await res.json();
+      if (!res.ok){ showToast('Failed: ' + (result.error || 'Unknown error'), 'err'); btnEl.disabled = false; return; }
+      showToast('Approved', 'ok');
+      await Promise.all([loadAllPayments(), loadStats(), loadWithdrawals(), loadCustomers()]);
+    } catch (e){ showToast('Network error: ' + e.message, 'err'); btnEl.disabled = false; }
+    return;
+  }
+  const { error } = await window.supabaseClient.rpc('admin_mark_payment', { p_payment_id: paymentId, p_status: status });
+  if (error){ showToast('Failed: ' + error.message, 'err'); btnEl.disabled = false; return; }
+  showToast('Payment marked ' + status, 'ok');
+  await Promise.all([loadAllPayments(), loadStats()]);
+}
+
+function tickPaymentTimers(){
+  document.querySelectorAll('.pay-row[data-expires]').forEach(row => {
+    const timerEl = row.querySelector('[data-timer]');
+    if (!timerEl) return;
+    const expires = new Date(row.getAttribute('data-expires'));
+    // If the RPC ever stops returning expires_at again, show a dash rather
+    // than writing "NaN:NaN" into the panel once every second.
+    if (isNaN(expires.getTime())){ timerEl.textContent = '--:--'; return; }
+    const secondsLeft = Math.max(0, Math.floor((expires - new Date()) / 1000));
+    const m = Math.floor(secondsLeft / 60); const s = secondsLeft % 60;
+    timerEl.textContent = `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+    timerEl.classList.toggle('urgent', secondsLeft < 300);
+  });
+}
+
+function renderEarnings(rows){
+  const c = document.getElementById('earningsList');
+  if (!rows.length){ c.innerHTML = '<div class="empty-state">No earnings history yet</div>'; return; }
+  const maxVal = Math.max(...rows.map(r => parseFloat(r.settled || 0)), 1);
+  c.innerHTML = rows.map(r => {
+    const pct = Math.max(4, (parseFloat(r.settled || 0) / maxVal) * 100);
+    // cycle_start is the actual 5pm Dhaka boundary the day began at — use
+    // it for the label rather than cycle_date, which is a plain calendar
+    // date and would misdescribe the boundary by a few hours near midnight.
+    const label = new Date(r.cycle_start).toLocaleDateString([], { month:'short', day:'numeric' });
+    return `
+      <div class="earn-row">
+        <div class="earn-date">${label}</div>
+        <div class="earn-bar-wrap"><div class="earn-bar" style="width:${pct}%;"></div></div>
+        <div class="earn-amt-wrap">
+          <div class="earn-amt">$${parseFloat(r.settled || 0).toFixed(2)}</div>
+          <div class="earn-profit">+$${parseFloat(r.admin_profit || 0).toFixed(2)} profit</div>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+async function handleAction(withdrawalId, action, btnEl){
+  btnEl.disabled = true; btnEl.textContent = 'Working…';
+  const { data: { session } } = await window.supabaseClient.auth.getSession();
+  try {
+    const res = await fetch(`${window.SUPABASE_URL}/functions/v1/btcpay-webhook/process-withdrawal`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session.access_token}` },
+      body: JSON.stringify({ withdrawalId, action }),
+    });
+    const result = await res.json();
+    if (!res.ok){ showToast('Failed: ' + (result.error || result.detail || 'Unknown error'), 'err'); btnEl.disabled = false; return; }
+    showToast('Success — status: ' + result.status, 'ok');
+    await Promise.all([loadWithdrawals(), loadStats()]);
+  } catch (e){ showToast('Network error: ' + e.message, 'err'); btnEl.disabled = false; }
+}
+
+async function loadDomains(){
+  const { data, error } = await window.supabaseClient.rpc('admin_list_domains');
+  if (error){ console.error(error); return; }
+  const domains = data || [];
+  document.getElementById('domainsCount').textContent = domains.length;
+  const c = document.getElementById('domainsList');
+  if (!domains.length){ c.innerHTML = '<div class="empty-state">No domains registered</div>'; return; }
+
+  const purposeLabel = { payment: 'Payment links', site: 'Main site', both: 'Payment + site' };
+  // A theme is a LAYOUT of the payment page, not a palette. The brand
+  // colour is the same on every domain; only the arrangement differs.
+  const themeLabel = { keypad: 'Keypad — big amount over a 3×4 pad',
+                       classic: 'Classic — amount field + quick chips',
+                       tile: 'Tile — full-green, large keypad' };
+  c.innerHTML = domains.map(d => `
+    <div class="link-row">
+      <div class="link-top">
+        <div>
+          <div class="link-slug">${escapeHtml(d.hostname)}</div>
+          <div class="link-owner">${purposeLabel[d.purpose] || d.purpose}${d.is_primary_site ? ' · ⭐ primary site' : ''}</div>
+          <div class="link-stats">Layout: ${themeLabel[d.theme] || d.theme || 'keypad'}</div>
+        </div>
+        <span class="badge ${d.is_active ? 'active' : 'inactive'}"><span class="badge-dot"></span>${d.is_active ? 'active' : 'disabled'}</span>
+      </div>
+      <div class="w-row" style="margin-top:10px;">
+        <select class="w-input" onchange="changeDomainTheme('${d.id}', this.value)" style="max-width:210px;">
+          ${['keypad','classic','tile'].map(t => `<option value="${t}" ${(d.theme||'keypad') === t ? 'selected' : ''}>${themeLabel[t]}</option>`).join('')}
+        </select>
+      </div>
+      <div class="pay-actions">
+        <button class="act-btn ${d.is_active ? 'act-reject' : 'act-approve'}" onclick="toggleDomain('${d.id}', ${!d.is_active}, this)">${d.is_active ? 'Disable' : 'Enable'}</button>
+        ${!d.is_primary_site ? `<button class="act-btn act-paid" onclick="makePrimary('${d.id}', this)">Make primary site</button>` : ''}
+        <button class="act-btn act-reject" onclick="deleteDomain('${d.id}', this)">Remove</button>
+      </div>
+    </div>`).join('');
+}
+
+async function addDomain(){
+  const hostname = document.getElementById('newDomainHost').value.trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\/$/, '');
+  const purpose = document.getElementById('newDomainPurpose').value;
+  const theme = document.getElementById('newDomainTheme').value;
+  if (!hostname || !hostname.includes('.')){ showToast('Enter a valid hostname', 'err'); return; }
+
+  const { error } = await window.supabaseClient.from('site_domains').insert({ hostname, purpose, theme, is_active: true });
+  if (error){ showToast(error.code === '23505' ? 'That domain is already registered' : 'Failed: ' + error.message, 'err'); return; }
+  document.getElementById('newDomainHost').value = ''; showToast('Domain added — now attach it in Cloudflare', 'ok'); await loadDomains();
+}
+async function changeDomainTheme(id, theme){ const { error } = await window.supabaseClient.from('site_domains').update({ theme }).eq('id', id); if (!error){ showToast('Theme updated', 'ok'); await loadDomains(); } }
+async function toggleDomain(id, newState, btnEl){ btnEl.disabled = true; const { error } = await window.supabaseClient.from('site_domains').update({ is_active: newState }).eq('id', id); if (!error){ showToast(newState ? 'Domain enabled' : 'Domain disabled', 'ok'); await loadDomains(); } }
+async function makePrimary(id, btnEl){ btnEl.disabled = true; await window.supabaseClient.from('site_domains').update({ is_primary_site: false }).neq('id', id); const { error } = await window.supabaseClient.from('site_domains').update({ is_primary_site: true }).eq('id', id); if (!error){ showToast('Primary site domain updated', 'ok'); await loadDomains(); } }
+async function deleteDomain(id, btnEl){ if (!confirm('Remove this domain?')) return; btnEl.disabled = true; const { error } = await window.supabaseClient.from('site_domains').delete().eq('id', id); if (!error){ showToast('Domain removed', 'ok'); await loadDomains(); } }
+async function saveDetailLimit(){ const limit = parseInt(document.getElementById('detailLimitInput').value, 10); if (isNaN(limit) || limit < 0 || limit > 100){ showToast('Enter a limit 0-100', 'err'); return; } const { error } = await window.supabaseClient.rpc('admin_set_link_limit', { p_creator_id: currentDetailCreatorId, p_limit: limit }); showToast(error ? 'Failed' : 'Link limit updated', error ? 'err' : 'ok'); if (!error) await loadCustomers(); }
+
+function startEdit(id){ editingMessageId = id; loadThread(); }
+function cancelEdit(){ editingMessageId = null; loadThread(); }
+async function saveMessageEdit(id){ const text = document.getElementById('editInput_' + id)?.value.trim(); if (!text){ showToast('Message cannot be empty', 'err'); return; } const { error } = await window.supabaseClient.from('support_messages').update({ message: text, edited_at: new Date().toISOString() }).eq('id', id); if (!error){ editingMessageId = null; showToast('Message updated', 'ok'); await loadThread(); } }
+async function deleteMessage(id){
+  // Hides it from this panel; the creator still sees it, and the row is
+  // retained. A support thread is often the only record of what was
+  // agreed about someone's money, so nothing here erases one outright.
+  if (!confirm('Hide this message from your view?\n\nThe creator will still see it, and it stays in the record.')) return;
+  const { error } = await window.supabaseClient.rpc('hide_message', { p_message_id: id });
+  if (error) return showToast('Failed: ' + error.message, 'err');
+  showToast('Message hidden', 'ok');
+  await loadThread();
+}
+async function clearThread(){ if (!selectedCreatorId){ showToast('Select a creator first', 'err'); return; } if (!confirm('Clear this entire conversation?')) return; const { error } = await window.supabaseClient.rpc('clear_message_thread', { p_user_id: selectedCreatorId }); if (!error){ showToast('Conversation cleared', 'ok'); await loadThread(); } }
+
+async function loadCreatorList(){
+  const { data, error } = await window.supabaseClient.rpc('admin_list_creators');
+  if (error) return;
+  const list = (data || []).slice().sort((a, b) => (b.unread_count || 0) - (a.unread_count || 0));
+  const totalUnread = list.reduce((s, c) => s + (c.unread_count || 0), 0);
+  const badge = document.getElementById('msgTabBadge'); badge.textContent = totalUnread; badge.classList.toggle('show', totalUnread > 0);
+  const sel = document.getElementById('creatorSelect'); const prevSelected = sel.value;
+  sel.innerHTML = '<option value="">— Choose a creator —</option>' + list.map(c => `<option value="${escapeAttr(c.id)}" ${c.unread_count > 0 ? 'class="creator-option-unread"' : ''}>${c.unread_count > 0 ? '🔴 ' : ''}${escapeHtml(c.display_name || c.email)}${c.unread_count > 0 ? ' (' + c.unread_count + ' new)' : ''}</option>`).join('');
+  if (prevSelected) sel.value = prevSelected;
+}
+
+async function loadThread(){
+  selectedCreatorId = document.getElementById('creatorSelect').value;
+  if (!selectedCreatorId){ document.getElementById('threadList').innerHTML = '<div class="empty-state">Select a creator above</div>'; return; }
+  // Newest-first then reversed, same reason as the creator side: sorting
+  // ascending with no limit would have hidden the most recent messages in
+  // any thread past a thousand.
+  const { data: newestFirst } = await window.supabaseClient
+    .from('support_messages').select('*')
+    .eq('user_id', selectedCreatorId)
+    .order('created_at', { ascending: false })
+    .limit(300);
+  const data = (newestFirst || []).slice().reverse();
+  const list = document.getElementById('threadList');
+  if (!data || !data.length){ list.innerHTML = '<div class="empty-state">No messages yet</div>'; return; }
+  list.innerHTML = data.map(m => {
+    const editing = editingMessageId === m.id;
+    if (m.deleted_by_creator) {
+      return `<div class="msg-bubble ${m.sender === 'admin' ? 'admin' : 'creator'}" style="opacity:0.6;"><div class="msg-from">${m.sender === 'admin' ? 'You (admin)' : '💬 Customer message'}</div>${escapeHtml(m.message)} <div class="msg-time">${fmtDate(m.created_at)}</div><div class="msg-deleted-badge">[Deleted by user]</div></div>`;
+    }
+    return `
+    <div class="msg-bubble ${m.sender === 'admin' ? 'admin' : 'creator'}">
+      <div class="msg-from">${m.sender === 'admin' ? 'You (admin)' : '💬 Customer message'}</div>
+      ${editing ? `<input class="msg-edit-input" id="editInput_${m.id}" value="${escapeAttr(m.message)}"><div class="msg-actions"><button class="msg-act" onclick="saveMessageEdit('${m.id}')">Save</button><button class="msg-act" onclick="cancelEdit()">Cancel</button></div>`
+        : `${escapeHtml(m.message)}<div class="msg-time">${fmtDate(m.created_at)}${m.edited_at ? ' · edited' : ''}</div><div class="msg-actions"><button class="msg-act" onclick="startEdit('${m.id}')">Edit</button><button class="msg-act danger" onclick="deleteMessage('${m.id}')">Hide</button></div>`}
+    </div>`;
+  }).join('');
+  list.scrollTop = list.scrollHeight;
+  // Mark-as-read: shudhu unread creator message thakle-i UPDATE chalay, ar
+  // shudhu sei unread row gulo te. Age prottek loadThread() call e puro
+  // thread e bulk UPDATE chole jeto — creator dashboard o sei shomoy same
+  // thread e nijer mark-as-read chalale Postgres deadlock (40P01) ar
+  // statement timeout (57014) hoto (supabase log e dekha giyechhe). Ekhon
+  // unread 0 hole kono UPDATE e cholbe na, ar thakle-o
+  // idx_messages_admin_unread index (migration 0034) er karone deterministic
+  // order e lock hoy. Fail korle thread rendering bondho hobe na.
+  const unreadForAdmin = data.filter(m => m.sender === 'creator' && !m.read_by_admin).length;
+  if (unreadForAdmin > 0) {
+    try {
+      await window.supabaseClient.from('support_messages').update({ read_by_admin: true })
+        .eq('user_id', selectedCreatorId).eq('sender', 'creator').eq('read_by_admin', false);
+    } catch (e) { console.warn('mark-as-read skipped:', e); }
+  }
+  await loadCreatorList();
+}
+
+async function sendAdminMessage(){
+  const text = document.getElementById('adminMsgInput').value.trim();
+  if (!text || !selectedCreatorId) return;
+  const { error } = await window.supabaseClient.from('support_messages').insert({ user_id: selectedCreatorId, sender: 'admin', message: text });
+  if (error){ showToast('Failed: ' + error.message, 'err'); return; }
+  document.getElementById('adminMsgInput').value = ''; await loadThread();
+}
+
+
+/* ============ Per-creator shop lock ============ */
+let detailLock = { shop_locked: false, forced_shop_id: null };
+
+async function loadShopLock(creatorId){
+  if (!allShops.length) await loadShops();
+
+  const { data } = await window.supabaseClient
+    .rpc('admin_customer_shop_lock', { p_creator_id: creatorId });
+  const row = Array.isArray(data) ? data[0] : data;
+  detailLock = row || { shop_locked: false, forced_shop_id: null };
+
+  const sel = document.getElementById('detailShopSelect');
+  const btn = document.getElementById('detailShopLockBtn');
+  if (!sel || !btn) return;
+
+  const rate = (p) => parseFloat(p) === 0 ? 'no extra cost' : 'payer +' + parseFloat(p) + '%';
+  sel.innerHTML = allShops.filter(sh => sh.is_active)
+    .map(sh => `<option value="${escapeAttr(sh.id)}" ${sh.id === detailLock.forced_shop_id ? 'selected' : ''}>${escapeHtml(sh.name)} — ${escapeHtml(rate(sh.surcharge_percent))}</option>`)
+    .join('');
+
+  sel.disabled = detailLock.shop_locked === true;
+  btn.textContent = detailLock.shop_locked ? 'Unlock' : 'Lock';
+  document.getElementById('detailShopLockHint').textContent = detailLock.shop_locked
+    ? `Locked to ${detailLock.shop_name || 'a shop'}. This creator cannot change the cost on any of their links.`
+    : 'Locking moves every link this creator owns onto the chosen cost and stops them changing it. Unlocked, they pick per link themselves.';
+}
+
+async function saveShopLock(){
+  const locking = !detailLock.shop_locked;
+  const shopId = document.getElementById('detailShopSelect').value;
+
+  if (locking && !shopId) return showToast('Pick a shop to lock them to', 'err');
+  if (locking && !confirm('Lock this creator to that cost?\n\nEvery link they already own moves onto it, and they will not be able to change the cost themselves.')) return;
+
+  const { error } = await window.supabaseClient.rpc('admin_lock_creator_shop', {
+    p_creator_id: currentDetailCreatorId,
+    p_locked: locking,
+    p_shop_id: locking ? shopId : null,
+  });
+  if (error) return showToast('Failed: ' + error.message, 'err');
+  showToast(locking ? 'Creator locked to that cost' : 'Creator unlocked', 'ok');
+  await loadShopLock(currentDetailCreatorId);
+  loadLinks();
+}
+
+/* ============ Global switches ============ */
+async function saveGlobalToggle(key, el){
+  const { error } = await window.supabaseClient.from('app_settings')
+    .upsert({ key, value: el.checked, updated_at: new Date().toISOString() });
+  if (error){ el.checked = !el.checked; return showToast('Failed: ' + error.message, 'err'); }
+  showToast(el.checked ? 'Turned on' : 'Turned off', 'ok');
+}
+
+async function saveHideSmallThreshold(){
+  const raw = fieldValue('hideSmallThreshold');
+  const amount = parseFloat(raw);
+  if (!raw || isNaN(amount) || amount < 0){
+    return showToast('Enter a threshold of 0 or more', 'err');
+  }
+  const { error } = await window.supabaseClient.from('app_settings')
+    .upsert({ key: 'hide_small_payments_threshold', value: amount, updated_at: new Date().toISOString() });
+  if (error) return showToast('Failed: ' + error.message, 'err');
+  showToast('Threshold saved — $' + amount.toFixed(2) + ' and under is hidden when the toggle is on', 'ok');
+}
+
+async function saveSupportLinks(){
+  const email = (fieldValue('supportEmailInput') ?? '').trim();
+  const groupUrl = (fieldValue('supportGroupInput') ?? '').trim();
+
+  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    return showToast('That does not look like an email address', 'err');
+  }
+  // Anything rendered as an href on a public page: only http(s), so a
+  // javascript: URL can never be saved here and fired at a visitor.
+  if (groupUrl && !/^https?:\/\//i.test(groupUrl)) {
+    return showToast('The group link must start with https://', 'err');
+  }
+
+  const { error } = await window.supabaseClient.from('app_settings')
+    .upsert({ key: 'support_links', value: { email, group_url: groupUrl },
+              updated_at: new Date().toISOString() });
+  showToast(error ? 'Failed: ' + error.message : 'Support links saved', error ? 'err' : 'ok');
+}
+
+
+/* ============ Staff (moderator) access ============ */
+async function loadStaff(){
+  if (!allCustomers.length) await loadCustomers();
+
+  const sel = document.getElementById('staffCreatorSelect');
+  if (sel){
+    // No .filter(c => c.role === 'creator') here. admin_customer_directory()
+    // does not return a role column at all — it already filters to creators
+    // inside the query — so testing c.role compared undefined against
+    // 'creator' and emptied the list every time.
+    if (!allCustomers.length){
+      sel.innerHTML = '<option value="">No creators yet</option>';
+    } else {
+      sel.innerHTML = '<option value="">— Choose a creator —</option>' +
+        allCustomers.map(c => `<option value="${escapeAttr(c.id)}">${escapeHtml(c.display_name || c.email)}</option>`).join('');
+    }
+  }
+
+  const { data, error } = await window.supabaseClient.rpc('admin_list_staff');
+  if (error) return;
+  const list = document.getElementById('staffList');
+  const staff = data || [];
+  if (!staff.length){ list.innerHTML = '<div class="empty-state">No staff yet</div>'; return; }
+
+  list.innerHTML = staff.map(m => `
+    <div class="link-row">
+      <div class="link-top">
+        <div style="min-width:0;">
+          <div class="link-slug">${safeText(m.display_name || m.email)}</div>
+          <div class="link-owner">${safeText(m.email)}</div>
+        </div>
+        <span class="badge ${m.role === 'admin' ? 'settled' : 'active'}"><span class="badge-dot"></span>${escapeHtml(m.role)}</span>
+      </div>
+      ${m.role === 'moderator' ? `
+        <div class="link-stats" style="margin-bottom:6px;">Handles ${(m.assigned_creators || []).length} of ${allCustomers.length} creators &mdash; full access to those, nothing on the rest.</div>
+        <div class="assign-grid">
+          ${allCustomers.map(c => `
+            <label class="assign-opt">
+              <input type="checkbox" ${(m.assigned_creators || []).includes(c.id) ? 'checked' : ''}
+                     onchange="assignCreator('${escapeAttr(m.id)}', '${escapeAttr(c.id)}', this)">
+              <span>${escapeHtml(c.display_name || c.email)}</span>
+            </label>`).join('')}
+        </div>
+        <div class="pay-actions">
+          <button class="act-btn act-reject" onclick="revokeModerator('${escapeAttr(m.id)}', this)">Remove access</button>
+        </div>` : ''}
+    </div>`).join('');
+}
+
+async function assignCreator(moderatorId, creatorId, box){
+  box.disabled = true;
+  try {
+    const { error } = await window.supabaseClient.rpc('admin_assign_creator', {
+      p_moderator_id: moderatorId, p_creator_id: creatorId, p_assigned: box.checked,
+    });
+    if (error){ box.checked = !box.checked; return showToast('Failed: ' + error.message, 'err'); }
+    showToast(box.checked ? 'Creator assigned' : 'Creator removed', 'ok');
+    loadStaff();
+  } finally { box.disabled = false; }
+}
+
+async function grantModerator(){
+  const id = document.getElementById('staffCreatorSelect').value;
+  if (!id) return showToast('Pick a creator first', 'err');
+  const { error } = await window.supabaseClient.rpc('admin_set_role', { p_user_id: id, p_role: 'moderator' });
+  if (error) return showToast('Failed: ' + error.message, 'err');
+  showToast('Moderator access granted', 'ok');
+  allCustomers = [];
+  loadStaff();
+}
+
+async function revokeModerator(id, btn){
+  if (!confirm('Remove review access? They become a normal creator again.')) return;
+  btn.disabled = true;
+  try {
+    const { error } = await window.supabaseClient.rpc('admin_set_role', { p_user_id: id, p_role: 'creator' });
+    if (error) return showToast('Failed: ' + error.message, 'err');
+    showToast('Access removed', 'ok');
+    allCustomers = [];
+    loadStaff();
+  } finally { btn.disabled = false; }
+}
+
+async function loadSettings(){
+  const { data } = await window.supabaseClient.from('app_settings').select('key, value');
+  const rates = data?.find(s => s.key === 'exchange_rates')?.value;
+  const notice = data?.find(s => s.key === 'platform_notice')?.value;
+  const defaultFee = data?.find(s => s.key === 'default_withdrawal_fee_percent')?.value;
+  const profitMargin = data?.find(s => s.key === 'profit_margin_percent')?.value;
+
+  if (rates){ document.getElementById('buyRate').value = rates.buy_rate || 133.00; document.getElementById('sellRate').value = rates.sell_rate || 133.00; }
+  document.getElementById('noticeInput').value = notice?.text || ''; document.getElementById('noticeActiveToggle').checked = notice?.active || false;
+  if (defaultFee){ document.getElementById('defaultFeeInput').value = defaultFee.percent; }
+  const auto = data?.find(s => s.key === 'auto_withdraw_enabled')?.value;
+  const feed = data?.find(s => s.key === 'public_feed_enabled')?.value;
+  const hideSmall = data?.find(s => s.key === 'hide_small_payments_enabled')?.value;
+  const hideSmallAmt = data?.find(s => s.key === 'hide_small_payments_threshold')?.value;
+  const support = data?.find(s => s.key === 'support_links')?.value || {};
+  const setChecked = (id, v) => { const e = document.getElementById(id); if (e) e.checked = v === true; };
+  setChecked('globalAutoWithdraw', auto);
+  setChecked('globalPublicFeed', feed);
+  setChecked('globalHideSmall', hideSmall);
+  const thresholdEl = document.getElementById('hideSmallThreshold');
+  if (thresholdEl) thresholdEl.value = (hideSmallAmt !== undefined && hideSmallAmt !== null) ? hideSmallAmt : 10;
+  const setVal = (id, v) => { const e = document.getElementById(id); if (e) e.value = v || ''; };
+  setVal('supportEmailInput', support.email);
+  setVal('supportGroupInput', support.group_url);
+
+  const defaultLinks = data?.find(s => s.key === 'default_max_payment_links')?.value;
+  const linkInput = document.getElementById('defaultLinkLimitInput');
+  if (linkInput) linkInput.value = defaultLinks?.count ?? 5;
+  if (profitMargin){ document.getElementById('profitMarginInput').value = profitMargin.percent; }
+}
+
+async function saveNotice(){ const text = document.getElementById('noticeInput').value.trim(); const active = document.getElementById('noticeActiveToggle').checked; const { error } = await window.supabaseClient.from('app_settings').upsert({ key: 'platform_notice', value: { text, active }, updated_at: new Date().toISOString() }); showToast(error ? 'Failed' : 'Notice saved', error ? 'err' : 'ok'); }
+async function saveDefaultLinkLimit(){
+  const count = parseInt(fieldValue('defaultLinkLimitInput'), 10);
+  if (!Number.isFinite(count) || count < 1 || count > 500){
+    return showToast('Enter a limit between 1 and 500', 'err');
+  }
+  // The key handle_new_user() reads. It has existed since 0006, but
+  // nothing ever wrote to it and the trigger never read it, so every new
+  // account got the column default of 5 whatever it said.
+  const { error } = await window.supabaseClient.from('app_settings')
+    .upsert({ key: 'default_max_payment_links', value: { count }, updated_at: new Date().toISOString() });
+  showToast(error ? 'Failed: ' + error.message : 'Default link limit saved', error ? 'err' : 'ok');
+}
+
+async function saveDefaultFee(){ const percent = parseFloat(document.getElementById('defaultFeeInput').value); if (isNaN(percent) || percent < 0 || percent > 50){ showToast('Enter a fee between 0-50', 'err'); return; } const { error } = await window.supabaseClient.from('app_settings').upsert({ key: 'default_withdrawal_fee_percent', value: { percent }, updated_at: new Date().toISOString() }); showToast(error ? 'Failed' : 'Default fee saved', error ? 'err' : 'ok'); }
+async function saveExchangeRates(){ const buy_rate = parseFloat(document.getElementById('buyRate').value); const sell_rate = parseFloat(document.getElementById('sellRate').value); const { error } = await window.supabaseClient.from('app_settings').upsert({ key: 'exchange_rates', value: { buy_rate, sell_rate }, updated_at: new Date().toISOString() }); showToast(error ? 'Failed' : 'Rates saved', error ? 'err' : 'ok'); }
+async function saveProfitMargin(){ 
+  const percent = parseFloat(document.getElementById('profitMarginInput').value); 
+  if (isNaN(percent) || percent < 0){ showToast('Enter a valid percentage', 'err'); return; } 
+  const { error } = await window.supabaseClient.from('app_settings').upsert({ key: 'profit_margin_percent', value: { percent }, updated_at: new Date().toISOString() }); 
+  showToast(error ? 'Failed' : 'Profit Margin saved', error ? 'err' : 'ok'); 
+  loadStats();
+}
+
+
+/* ============ BTCPay shops ============
+   One server, several stores. BTCPay applies each store's rate spread
+   itself, so Boltpay never touches the amount — it sends $100 USD to
+   the store the link belongs to and BTCPay converts at that store's
+   marked-up rate. The creator is still credited $100.
+
+   surcharge_percent here is therefore display-only. Nothing can read it
+   back off BTCPay, so if you change the spread there, change it here
+   too or the panel will quote the wrong number. */
+let allShops = [];
+let editingShopId = null;
+
+
+async function loadShops(){
+  const { data, error } = await window.supabaseClient.rpc('admin_list_shops');
+  if (error){ showToast('Failed to load shops: ' + error.message, 'err'); return; }
+  allShops = data || [];
+  renderShops();
+}
+
+function renderShops(){
+  const c = document.getElementById('shopsList');
+  if (!allShops.length){ c.innerHTML = '<div class="empty-state">No shops configured</div>'; return; }
+  c.innerHTML = allShops.map(sh => `
+    <div class="link-row">
+      <div class="link-top">
+        <div style="min-width:0;">
+          <div class="link-slug">${safeText(sh.name)}${sh.is_default ? ' &middot; default' : ''}</div>
+          <div class="link-owner">${parseFloat(sh.surcharge_percent) === 0 ? 'no extra cost' : 'payer +' + parseFloat(sh.surcharge_percent) + '%'}</div>
+          <div class="link-stats">store ${safeText(sh.store_id)} &middot; key ${safeText(sh.api_key_env)} &middot; ${sh.link_count} link${sh.link_count === 1 ? '' : 's'}</div>
+        </div>
+        <span class="badge ${sh.is_active ? 'active' : 'inactive'}"><span class="badge-dot"></span>${sh.is_active ? 'active' : 'disabled'}</span>
+      </div>
+      <div class="pay-actions">
+        <button class="act-btn act-reject" onclick="editShop('${escapeAttr(sh.id)}')">Edit</button>
+        <button class="act-btn ${sh.is_active ? 'act-reject' : 'act-approve'}" onclick="toggleShop('${escapeAttr(sh.id)}', ${!sh.is_active}, this)">
+          ${sh.is_active ? 'Disable' : 'Enable'}
+        </button>
+        <button class="act-btn act-reject" onclick="deleteShop('${escapeAttr(sh.id)}', this)">Delete</button>
+      </div>
+    </div>`).join('');
+}
+
+function resetShopForm(){
+  editingShopId = null;
+  const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = v; };
+  ['shopName','shopStoreId','shopSurcharge'].forEach(id => set(id, ''));
+  set('shopApiKeyEnv', 'BTCPAY_API_KEY');
+  document.getElementById('shopFormTitle').textContent = 'Add a BTCPay shop';
+  document.getElementById('shopSaveBtn').textContent = 'Add shop';
+  document.getElementById('shopCancelBtn').style.display = 'none';
+}
+
+function editShop(id){
+  const sh = allShops.find(x => x.id === id);
+  if (!sh) return;
+  editingShopId = id;
+  const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = v; };
+  set('shopName', sh.name || '');
+  set('shopStoreId', sh.store_id || '');
+  set('shopSurcharge', sh.surcharge_percent ?? 0);
+  set('shopApiKeyEnv', sh.api_key_env || 'BTCPAY_API_KEY');
+  document.getElementById('shopFormTitle').textContent = 'Edit shop';
+  document.getElementById('shopSaveBtn').textContent = 'Save changes';
+  document.getElementById('shopCancelBtn').style.display = '';
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+// getElementById returns null for an element that is not in the markup,
+// and reading .value off null throws — which aborts the click handler with
+// nothing at all shown on screen. That is exactly how "Add shop" came to
+// do nothing. Reading through this helper turns a missing field into a
+// visible message instead of silence.
+function fieldValue(id, fallback = ''){
+  const el = document.getElementById(id);
+  if (!el){
+    console.error('Missing form field:', id);
+    showToast(`This page is out of date (missing "${id}") — hard-refresh it`, 'err');
+    return null;
+  }
+  return el.value ?? fallback;
+}
+
+async function saveShop(btn){
+  const name = (fieldValue('shopName') ?? '').trim();
+  const storeId = (fieldValue('shopStoreId') ?? '').trim();
+  const surcharge = parseFloat(fieldValue('shopSurcharge'));
+  const apiKeyEnv = fieldValue('shopApiKeyEnv') || 'BTCPAY_API_KEY';
+
+  if (!name) return showToast('Shop name is required', 'err');
+  if (!storeId) return showToast('BTCPay store ID is required', 'err');
+  if (!Number.isFinite(surcharge) || surcharge < 0 || surcharge > 100)
+    return showToast('Rate must be between 0 and 100', 'err');
+
+
+  const existing = editingShopId ? allShops.find(x => x.id === editingShopId) : null;
+
+  btn.disabled = true;
+  try {
+    const { error } = await window.supabaseClient.rpc('admin_upsert_shop', {
+      p_id: editingShopId,
+      p_name: name,
+      p_store_id: storeId,
+      p_surcharge_percent: surcharge,
+      p_api_key_env: apiKeyEnv,
+      p_is_active: existing ? existing.is_active : true,
+      p_is_default: existing ? existing.is_default : allShops.length === 0,
+      p_sort_order: existing ? existing.sort_order : allShops.length,
+    });
+    if (error) return showToast('Failed: ' + error.message, 'err');
+    showToast(editingShopId ? 'Shop updated' : 'Shop added', 'ok');
+    resetShopForm();
+    loadShops();
+  } catch (e) {
+    console.error('saveShop failed:', e);
+    showToast('Could not save the shop — see the browser console', 'err');
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function toggleShop(id, makeActive, btn){
+  const sh = allShops.find(x => x.id === id);
+  if (!sh) return;
+  btn.disabled = true;
+  const { error } = await window.supabaseClient.rpc('admin_upsert_shop', {
+    p_id: id, p_name: sh.name, p_store_id: sh.store_id,
+    p_surcharge_percent: sh.surcharge_percent,
+    p_api_key_env: sh.api_key_env || 'BTCPAY_API_KEY',
+    p_is_active: makeActive, p_is_default: sh.is_default, p_sort_order: sh.sort_order,
+  });
+  btn.disabled = false;
+  if (error) return showToast('Failed: ' + error.message, 'err');
+  loadShops();
+}
+
+async function deleteShop(id, btn){
+  if (!confirm('Delete this shop?')) return;
+  btn.disabled = true;
+  const { error } = await window.supabaseClient.rpc('admin_delete_shop', { p_id: id });
+  btn.disabled = false;
+  // The function refuses while links still point at it — deleting would
+  // leave those links with no store and every new invoice would fail.
+  if (error) return showToast(error.message, 'err');
+  showToast('Shop deleted', 'ok');
+  loadShops();
+}
+
+function switchTab(tab, btn){
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active')); btn.classList.add('active');
+  ['transactions','pending','customers','links','messages','earnings','shops','domains','settings'].forEach(t => { document.getElementById('tab-' + t).style.display = (t === tab) ? 'block' : 'none'; });
+  if (tab === 'transactions') loadAllPayments();
+  if (tab === 'earnings') loadEarnings();
+  if (tab === 'messages') loadCreatorList();
+  if (tab === 'domains') loadDomains();
+  if (tab === 'shops') loadShops();
+  if (tab === 'settings') loadStaff();
+  if (tab === 'customers') closeCustomerDetail();
+}
+
+function showToast(msg, type){ const t = document.getElementById('toast'); t.textContent = msg; t.className = 'toast ' + type; t.style.display = 'block'; setTimeout(() => { t.style.display = 'none'; }, 3500); }
+</script>
+                                              </body>
+                                            </html>

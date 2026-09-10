@@ -1,0 +1,662 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#000000">
+<title>Scan Bitcoin QR – Bolt App</title>
+
+<!-- Invoice URLs are per-customer and live in the address bar. They must
+     never land in a search index or a chat preview. -->
+<meta name="robots" content="noindex, nofollow">
+<meta name="referrer" content="no-referrer">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+<!-- All four are required. qrcode.min.js draws the QR; config.js defines
+     window.supabaseClient; theme.js defines applyDomainTheme(), which is
+     awaited on load. Removing any one makes this page fail silently. -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
+<script src="theme.js"></script>
+
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body { width: 100%; height: 100%; font-family: 'DM Sans', sans-serif; background: #000; color: #fff; overflow: hidden; }
+body { display: flex; justify-content: center; }
+
+/* Main Scanner Container */
+#step2 {
+  width: 100%; max-width: 430px; height: 100%;
+  display: none; flex-direction: column;
+  padding: 12px 20px 16px; position: relative;
+}
+
+/* Top Nav */
+.s2-topbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; flex-shrink: 0; }
+.icon-btn, .help-btn {
+  background: rgba(255, 255, 255, 0.08); border: none; border-radius: 12px;
+  color: #fff; display: flex; align-items: center; justify-content: center;
+  cursor: pointer; padding: 10px 16px; font-weight: 700; font-size: 14px;
+  font-family: 'DM Sans', sans-serif;
+}
+.icon-btn { width: 44px; padding: 0; border-radius: 50%; }
+
+/* The countdown. The invoice dies with it, so it is not decoration. */
+.timer-pill {
+  background: rgba(255,255,255,0.08); border-radius: 999px; padding: 8px 14px;
+  font-size: 13px; font-weight: 700; letter-spacing: 0.5px; font-variant-numeric: tabular-nums;
+}
+.timer-pill.urgent { background: rgba(255,69,58,0.18); color: #FF6B60; }
+
+/* Title & QR */
+.scanner-title { font-size: 24px; font-weight: 700; line-height: 1.15; margin-bottom: 12px; letter-spacing: -0.5px; flex-shrink: 0; }
+.qr-container { display: flex; flex-direction: column; align-items: center; justify-content: center; flex: 1; min-height: 0; }
+
+/* Awaiting Payment Text */
+.awaiting-text {
+  font-size: 14px; font-weight: 600; color: rgba(255, 255, 255, 0.7);
+  margin-bottom: 12px; letter-spacing: 0.3px;
+  animation: pulseWait 1.5s infinite ease-in-out;
+}
+@keyframes pulseWait { 0%, 100% { opacity: 0.4; } 50% { opacity: 1; } }
+
+.qr-outer-frame { border: 1px solid rgba(255, 255, 255, 0.15); border-radius: 28px; padding: 12px; position: relative; cursor: pointer; }
+#qrcode { background: #fff; padding: 10px; border-radius: 16px; min-width: 210px; min-height: 210px; display: flex; align-items: center; justify-content: center; }
+#qrcode img, #qrcode canvas { border-radius: 6px; }
+
+/* Bolt App Logo inside QR */
+.qr-logo { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: #fff; padding: 4px; border-radius: 10px; }
+.qr-logo-inner { background: #00D632; color: #fff; width: 34px; height: 34px; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 24px; border-radius: 8px; font-family: 'Arial', sans-serif; }
+
+/* Info Cards */
+.info-card {
+  background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px; padding: 10px 14px; margin-top: 8px; font-size: 12.5px; text-align: left;
+  line-height: 1.4; width: 100%;
+}
+
+/* Footer Buttons (Side by Side) */
+.action-footer { margin-top: 12px; width: 100%; display: flex; gap: 10px; justify-content: center; flex-shrink: 0; max-width: 360px; margin-inline: auto; }
+.pill-btn {
+  border: none; border-radius: 999px; padding: 15px 10px; font-size: 15px; font-weight: 700;
+  width: 100%; cursor: pointer; transition: transform 0.1s, opacity 0.2s; font-family: 'DM Sans', sans-serif;
+}
+.btn-copy { background: rgba(255, 255, 255, 0.1); color: #fff; border: 1px solid rgba(255, 255, 255, 0.2); }
+.btn-pay { background: #fff; color: #000; }
+.btn-copy.done { background: #00C851; color: #000; border-color: #00C851; }
+.pill-btn:active { transform: scale(0.96); opacity: 0.9; }
+
+/* ====== SUCCESS UI (STEP 3) ====== */
+#step3 {
+  display: none; width: 100%; max-width: 430px; height: 100%;
+  flex-direction: column; align-items: center; justify-content: center;
+  padding: 24px 20px; text-align: center; margin: 0 auto;
+}
+.success-icon {
+  width: 80px; height: 80px; background: #00C851; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  margin: 0 auto 20px; animation: pop 0.6s cubic-bezier(0.34,1.56,0.64,1) forwards;
+}
+@keyframes pop { 0% { transform: scale(0); opacity: 0; } 60% { transform: scale(1.15); } 100% { transform: scale(1); opacity: 1; } }
+.success-title { font-size: 24px; font-weight: 800; color: #fff; margin-bottom: 6px; }
+.success-sub { color: rgba(255, 255, 255, 0.5); font-size: 14px; margin-bottom: 8px; }
+.success-amount { font-size: 44px; font-weight: 800; color: #00C851; margin-bottom: 22px; }
+.receipt-card{
+  width:100%; max-width:340px; background:rgba(255,255,255,0.05);
+  border:1px solid rgba(255,255,255,0.10); border-radius:16px;
+  padding:14px 16px; margin:0 auto 12px; text-align:left;
+}
+.receipt-row{ display:flex; justify-content:space-between; gap:12px; padding:7px 0; font-size:13px; }
+.receipt-row + .receipt-row{ border-top:1px solid rgba(255,255,255,0.07); }
+.receipt-row span{ color:rgba(255,255,255,0.5); flex-shrink:0; }
+.receipt-row b{ text-align:right; overflow:hidden; text-overflow:ellipsis; }
+.receipt-row b.mono{ font-family:monospace; font-size:11px; }
+.receipt-actions{ display:flex; gap:10px; width:100%; max-width:340px; margin:0 auto; }
+
+/* ====== LOADING / GONE ====== */
+#statePanel {
+  display: flex; width: 100%; max-width: 430px; height: 100%;
+  flex-direction: column; align-items: center; justify-content: center;
+  padding: 32px 24px; text-align: center; margin: 0 auto; gap: 12px;
+}
+.state-spinner { width: 42px; height: 42px; border: 4px solid rgba(255,255,255,0.15); border-top-color: #fff; border-radius: 50%; animation: spin 0.9s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.state-title { font-size: 22px; font-weight: 800; }
+.state-sub { font-size: 14px; color: rgba(255,255,255,0.5); line-height: 1.5; max-width: 300px; }
+
+/* Modal */
+#howToPayModal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.9); z-index: 200; align-items: center; justify-content: center; padding: 20px; }
+#howToPayModal.open { display: flex; }
+.modal-inner { width: 100%; max-width: 380px; background: #111; border: 1px solid rgba(255,255,255,0.1); border-radius: 24px; padding: 24px; }
+
+/* Toast for clipboard failures — iOS Safari refuses navigator.clipboard
+   outside a user gesture, and a silently-failing copy button is worse
+   than a slow one. */
+#toast {
+  position: fixed; left: 50%; bottom: 26px; transform: translateX(-50%);
+  background: #fff; color: #000; padding: 12px 20px; border-radius: 999px;
+  font-size: 14px; font-weight: 700; z-index: 300; display: none; max-width: 90%;
+  text-align: center; box-shadow: 0 8px 30px rgba(0,0,0,0.5);
+}
+</style>
+</head>
+<body>
+
+<!-- LOADING / INVOICE GONE -->
+<div id="statePanel">
+  <div class="state-spinner" id="stateSpinner"></div>
+  <div class="state-title" id="stateTitle" style="display:none;"></div>
+  <div class="state-sub" id="stateSub">Loading invoice…</div>
+  <button class="pill-btn btn-pay" id="stateBtn" style="display:none; max-width:240px; margin-top:10px;">Start over</button>
+</div>
+
+<!-- STEP 2 UI -->
+<div id="step2">
+  <div class="s2-topbar">
+    <button class="icon-btn" id="closeBtn" aria-label="Close">
+      <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+    </button>
+    <div class="timer-pill" id="timerPill">--:--</div>
+    <button class="help-btn" id="helpBtn">Help</button>
+  </div>
+
+  <div class="scanner-title">Scan a Bitcoin or<br>Lightning QR code</div>
+
+  <div class="qr-container">
+    <div class="awaiting-text">Awaiting payment...</div>
+
+    <div id="qrLink">
+      <div class="qr-outer-frame" id="chargeRing">
+        <div id="qrcode"></div>
+        <div class="qr-logo"><div class="qr-logo-inner">$</div></div>
+      </div>
+    </div>
+
+    <div style="width: 100%; max-width: 340px;">
+      <div class="info-card">★ Tap the QR code to open Cash App with this address already loaded. If nothing opens, tap <b>Copy address</b> and paste it instead.</div>
+      <div class="info-card">
+        <div style="font-weight:700; margin-bottom:6px;">Pay from your Cash App balance <span style="font-size:11px; opacity:0.6;">(no need to buy BTC first)</span></div>
+        <div style="font-size:11.5px; opacity:0.8;">Open Cash App &rarr; Money ($) tab &rarr; Bitcoin &rarr; Send &rarr; Scan or paste this address &rarr; Confirm</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="action-footer">
+    <button id="copyBtn" class="pill-btn btn-copy">Copy address</button>
+    <button id="payBtn" class="pill-btn btn-pay">Open Cash App</button>
+  </div>
+</div>
+
+<!-- STEP 3 (SUCCESS) UI -->
+<div id="step3">
+  <div class="success-icon">
+    <svg width="44" height="44" fill="none" stroke="#000" stroke-width="3" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/>
+    </svg>
+  </div>
+  <div class="success-title">Payment Received!</div>
+  <div class="success-sub">Thank you for your payment</div>
+  <div class="success-amount" id="successAmount">$0.00</div>
+
+  <!-- A receipt the payer can actually keep.
+       Until now the only trace of a completed payment was this screen,
+       which vanishes the moment the tab closes. Someone who has just sent
+       money to a stranger's link had nothing to show for it and no
+       reference to quote if it ever needed chasing. -->
+  <div class="receipt-card" id="receiptCard">
+    <div class="receipt-row"><span>Paid to</span><b id="rcpMerchant">&mdash;</b></div>
+    <div class="receipt-row"><span>Amount</span><b id="rcpAmount">&mdash;</b></div>
+    <div class="receipt-row"><span>Date</span><b id="rcpDate">&mdash;</b></div>
+    <div class="receipt-row"><span>Reference</span><b class="mono" id="rcpRef">&mdash;</b></div>
+  </div>
+
+  <div class="receipt-actions">
+    <button class="pill-btn btn-copy" id="rcpCopyBtn">Copy reference</button>
+    <button class="pill-btn btn-copy" id="rcpSaveBtn">Save receipt</button>
+  </div>
+
+  <button class="pill-btn btn-pay" id="doneBtn" style="max-width: 340px; margin-top:14px;">Done</button>
+</div>
+
+<!-- HOW TO PAY MODAL UI -->
+<div id="howToPayModal">
+  <div class="modal-inner">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+      <h2 style="font-size:20px;">How to pay with Cash App</h2>
+      <button id="modalCloseBtn" style="background:none; border:none; color:#fff; font-size:20px; cursor:pointer;">✕</button>
+    </div>
+    <div style="font-size:14px; line-height:1.7; opacity:0.85;">
+<b>Fastest:</b> tap the QR code or <b>Open Cash App</b>. Cash App opens with
+      this address already loaded — just confirm.<br><br>
+      <b>If nothing opens:</b><br>
+      1. Tap <b>Copy address</b> (it is already copied for you).<br>
+      2. Open Cash App and tap the <b>Money ($)</b> tab.<br>
+      3. Tap <b>Bitcoin</b>, then <b>Send</b>.<br>
+      4. Tap the <b>scan icon</b> and scan the QR, or <b>Paste</b> the address.<br>
+      5. Confirm with your PIN or Face&nbsp;ID.
+    </div>
+    <div style="font-size:12px; line-height:1.6; opacity:0.55; margin-top:14px;">
+      The amount is already inside the invoice — you don't need to type it.
+      This invoice expires when the timer runs out.
+    </div>
+    <button class="pill-btn btn-pay" id="modalGotItBtn" style="margin-top:20px;">Got it</button>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+// Uses window.supabaseClient set up in config.js (same pattern as every other page)
+const supabaseClient = window.supabaseClient;
+
+let timerInterval, realtimeChannel;
+let currentPayCode = '';
+let currentPayUrl = '';   // the lightning: URI handed to the OS
+let returnPage = '/';
+let currentPaymentId = '';
+let merchantName = '';
+
+// The deep link is the standard `lightning:` URI — create-invoice already
+// returns exactly that as payUrl. When a wallet is registered as the
+// handler for that scheme, the OS hands it the invoice and the payment
+// screen opens pre-filled; no typing, no pasting. For a customer whose
+// only Lightning-capable app is Cash App, that is Cash App.
+//
+// It is the OS that decides, not this page, so the chain below degrades:
+//   lightning: URI  ->  open Cash App plain  ->  app store
+// and the invoice is copied to the clipboard before any of it, so a paste
+// is one tap away if nothing claims the scheme.
+const CASHAPP_APP_LINK = 'https://cash.app/launch';
+const CASHAPP_SCHEME = 'cashapp://';
+const CASHAPP_STORE_IOS = 'https://apps.apple.com/app/cash-app/id711923939';
+const CASHAPP_STORE_ANDROID = 'https://play.google.com/store/apps/details?id=com.squareup.cash';
+
+function el(id){ return document.getElementById(id); }
+
+function showStep(n){
+  el('statePanel').style.display = 'none';
+  el('step2').style.display = n === 2 ? 'flex' : 'none';
+  el('step3').style.display = n === 3 ? 'flex' : 'none';
+}
+
+function showState(title, sub, btnLabel, btnHref){
+  el('step2').style.display = 'none';
+  el('step3').style.display = 'none';
+  el('statePanel').style.display = 'flex';
+  el('stateSpinner').style.display = title ? 'none' : 'block';
+  el('stateTitle').style.display = title ? 'block' : 'none';
+  el('stateTitle').textContent = title || '';
+  el('stateSub').textContent = sub || '';
+  const btn = el('stateBtn');
+  btn.style.display = btnLabel ? 'block' : 'none';
+  btn.textContent = btnLabel || '';
+  btn.onclick = () => { window.location.href = btnHref || returnPage || '/'; };
+}
+
+// An invoice reached by a shared or bookmarked URL can legitimately no
+// longer exist. Sending the visitor back through history from a fresh tab
+// left them on a blank page, so say what happened instead.
+function showInvoiceGone(msg){
+  clearInterval(timerInterval);
+  if (realtimeChannel) supabaseClient.removeChannel(realtimeChannel);
+  showState(
+    msg || 'This invoice is no longer available.',
+    'Start a new payment to get a fresh invoice.',
+    'Start over',
+    returnPage || '/'
+  );
+}
+
+function toast(msg){
+  const t = el('toast');
+  t.textContent = msg;
+  t.style.display = 'block';
+  clearTimeout(toast._t);
+  toast._t = setTimeout(() => { t.style.display = 'none'; }, 2600);
+}
+
+function renderQr(qrText){
+  const box = el('qrcode');
+  if (!box || box.dataset.rendered === '1') return;
+  box.innerHTML = '';
+
+  // The QR library comes from a CDN. An ad blocker, a corporate proxy or a
+  // flaky connection can drop it, and without this guard the exception left
+  // the customer staring at "Loading invoice…" forever with a live invoice
+  // they had no way to pay. Show the address instead — Copy still works.
+  if (typeof QRCode === 'undefined'){
+    console.error('QR library failed to load');
+    box.innerHTML = '<div style="padding:14px; font-size:10px; line-height:1.35; color:#000; ' +
+      'word-break:break-all; font-family:monospace; max-width:190px; max-height:190px; overflow:hidden;">' +
+      qrText.replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])) + '</div>';
+    box.dataset.rendered = '1';
+    toast('QR could not load — use Copy address instead');
+    return;
+  }
+
+  // Black on white at high correction, because the Bolt logo sits over the
+  // middle of the code and covers some of its modules.
+  new QRCode(box, {
+    text: qrText, width: 196, height: 196,
+    colorDark: '#000000', colorLight: '#ffffff',
+    correctLevel: QRCode.CorrectLevel.H,
+  });
+  box.dataset.rendered = '1';
+}
+
+window.addEventListener('DOMContentLoaded', async () => {
+  await applyDomainTheme();
+
+  // The id in the URL is the source of truth. sessionStorage is only a
+  // cache from the page that created this invoice, so the QR can paint
+  // before the round trip finishes — and it is trusted only when it refers
+  // to the same invoice the URL names.
+  const urlId = new URLSearchParams(window.location.search).get('id');
+  let cached = null;
+  try {
+    const saved = sessionStorage.getItem('invoiceSession');
+    if (saved) cached = JSON.parse(saved);
+  } catch { cached = null; }
+
+  currentPaymentId = urlId || cached?.paymentId || null;
+  if (!currentPaymentId){ window.location.href = '/'; return; }
+
+  const cacheMatches = cached && cached.paymentId === currentPaymentId;
+  returnPage = (cacheMatches && cached.returnUrl) || '/';
+
+  if (cacheMatches && (cached.payCode || cached.qrText)){
+    currentPayCode = cached.payCode || cached.qrText;
+    // payUrl from create-invoice is already `lightning:<bolt11>`. It falls
+    // back to a BTCPay checkout URL only when the node returned no bolt11,
+    // and that is an https link, which must not be treated as a deep link.
+    currentPayUrl = (cached.payUrl && cached.payUrl.startsWith('lightning:'))
+      ? cached.payUrl
+      : 'lightning:' + currentPayCode;
+    renderQr(currentPayCode);
+  }
+
+  const { data: rows, error } = await supabaseClient.rpc('get_invoice_public', { p_payment_id: currentPaymentId });
+  const row = Array.isArray(rows) ? rows[0] : rows;
+  if (error || !row){ showInvoiceGone(); return; }
+
+  // Rebuild the QR from the server when there was no usable cache — this is
+  // what makes the link work on a second device, after a refresh, or once
+  // the tab has been closed and reopened.
+  if (!currentPayCode && row.lightning_invoice){
+    currentPayCode = row.lightning_invoice;
+    currentPayUrl = 'lightning:' + row.lightning_invoice;
+    renderQr(currentPayCode);
+  }
+  if (!currentPayCode){ showInvoiceGone(); return; }
+
+  merchantName = row.merchant_name || row.link_slug || '';
+
+  if (row.link_slug) returnPage = '/' + row.link_slug;
+
+  if (row.status === 'settled'){
+    finishAsSettled(row.amount_settled || row.amount_requested);
+    return;
+  }
+  if (row.status === 'expired' || row.status === 'invalid'){
+    sessionStorage.removeItem('invoiceSession');
+    showInvoiceGone('This invoice has expired.');
+    return;
+  }
+
+  showStep(2);
+  startTimer(row.expires_at);
+  subscribeToPaymentUpdates(currentPaymentId, row.amount_requested);
+});
+
+/* ---------- clipboard ---------- */
+async function copyInvoice(){
+  if (!currentPayCode) return false;
+  try {
+    await navigator.clipboard.writeText(currentPayCode);
+    return true;
+  } catch (e) {
+    // Older iOS Safari and any non-secure context reject the async
+    // clipboard API. execCommand still works there.
+    try {
+      const ta = document.createElement('textarea');
+      ta.value = currentPayCode;
+      ta.setAttribute('readonly', '');
+      ta.style.position = 'fixed'; ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.select(); ta.setSelectionRange(0, ta.value.length);
+      const ok = document.execCommand('copy');
+      document.body.removeChild(ta);
+      return ok;
+    } catch (e2) {
+      console.error('copy failed:', e2);
+      return false;
+    }
+  }
+}
+
+async function copyAddress(){
+  const btn = el('copyBtn');
+  const ok = await copyInvoice();
+  if (!ok){ toast('Could not copy — press and hold the QR code instead'); return; }
+  btn.textContent = 'Copied!';
+  btn.classList.add('done');
+  setTimeout(() => { btn.textContent = 'Copy address'; btn.classList.remove('done'); }, 2000);
+}
+
+/* ---------- Cash App ---------- */
+/**
+ * Copy the invoice, then hand the `lightning:` URI to the OS.
+ *
+ * Each step is only reached if the one before it left the page visible.
+ * When a wallet does take the URI, this tab is backgrounded and every
+ * pending fallback is cancelled — which is why the timers check
+ * document.hidden rather than firing blindly.
+ */
+async function openCashApp(){
+  if (!currentPayCode) return;
+
+  const copied = await copyInvoice();
+  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+  const isAndroid = /Android/.test(navigator.userAgent);
+
+  if (!isIOS && !isAndroid){
+    // Desktop has no app to hand off to. The QR is the answer there.
+    toast(copied ? 'Address copied — scan the QR with Cash App on your phone'
+                 : 'Scan the QR code with Cash App on your phone');
+    return;
+  }
+
+  toast(copied ? 'Opening Cash App — paste the address if it asks'
+               : 'Opening Cash App…');
+
+  let cancelled = false;
+  const cancel = () => { cancelled = true; };
+  window.addEventListener('pagehide', cancel, { once: true });
+  window.addEventListener('blur', cancel, { once: true });
+  document.addEventListener('visibilitychange', () => { if (document.hidden) cancel(); }, { once: true });
+
+  const step = (fn, delay) => setTimeout(() => {
+    if (cancelled || document.hidden) return;
+    fn();
+  }, delay);
+
+  // 1. The invoice itself. If a wallet owns the lightning: scheme, it
+  //    opens already loaded with this payment — nothing to paste.
+  window.location.href = currentPayUrl || ('lightning:' + currentPayCode);
+
+  // 2. Nothing claimed it: open Cash App plain, with the invoice on the
+  //    clipboard so it is a single paste away.
+  step(() => {
+    window.location.href = isAndroid ? CASHAPP_SCHEME : CASHAPP_APP_LINK;
+  }, 1400);
+
+  // 3. Cash App is not installed.
+  step(() => {
+    window.location.href = isIOS ? CASHAPP_STORE_IOS : CASHAPP_STORE_ANDROID;
+  }, 3000);
+}
+
+function openModal(){ el('howToPayModal').classList.add('open'); }
+function closeModal(){ el('howToPayModal').classList.remove('open'); }
+
+/* ---------- timer ---------- */
+function startTimer(expiresAt){
+  clearInterval(timerInterval);
+  const expiryMs = new Date(expiresAt).getTime();
+  if (!Number.isFinite(expiryMs)) {
+    updateTimerPill(0);
+    return;
+  }
+
+  const update = () => {
+    const secondsLeft = Math.max(0, Math.floor((expiryMs - Date.now()) / 1000));
+    updateTimerPill(secondsLeft);
+    if (secondsLeft > 0) return;
+
+    clearInterval(timerInterval);
+    if (realtimeChannel) supabaseClient.removeChannel(realtimeChannel);
+    sessionStorage.removeItem('invoiceSession');
+    showInvoiceGone('This invoice has expired.');
+  };
+
+  update();
+  timerInterval = setInterval(update, 1000);
+}
+
+function updateTimerPill(t){
+  const m = Math.floor(t/60), s = t%60;
+  const pill = el('timerPill');
+  pill.textContent = `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+  pill.classList.toggle('urgent', t < 300);
+}
+
+// Realtime, not polling — instant confirmation, no repeated HTTP calls, and
+// the browser never touches the signature-protected webhook endpoint.
+function subscribeToPaymentUpdates(paymentId, amount){
+  realtimeChannel = supabaseClient
+    .channel('payment-' + paymentId)
+    .on('postgres_changes', { event:'UPDATE', schema:'public', table:'payments', filter:`id=eq.${paymentId}` }, (payload) => {
+      const status = payload.new.status;
+      if (status === 'settled'){
+        finishAsSettled(payload.new.amount_settled || amount);
+      } else if (status === 'expired' || status === 'invalid'){
+        clearInterval(timerInterval);
+        supabaseClient.removeChannel(realtimeChannel);
+        sessionStorage.removeItem('invoiceSession');
+        showInvoiceGone('This invoice has expired.');
+      }
+    })
+    .subscribe();
+}
+
+function finishAsSettled(amount){
+  clearInterval(timerInterval);
+  if (realtimeChannel) supabaseClient.removeChannel(realtimeChannel);
+  sessionStorage.removeItem('invoiceSession');
+  showStep(3);
+
+  const paid = parseFloat(amount).toFixed(2);
+  const when = new Date();
+  el('successAmount').textContent = '$' + paid;
+
+  // Fill the receipt. The invoice id is the reference: it is what the
+  // creator can look up, and what the home page's payment lookup accepts.
+  const shortRef = currentPaymentId.length > 18
+    ? currentPaymentId.slice(0, 8) + '…' + currentPaymentId.slice(-6)
+    : currentPaymentId;
+  el('rcpMerchant').textContent = merchantName || '—';
+  el('rcpAmount').textContent = '$' + paid;
+  el('rcpDate').textContent = when.toLocaleString();
+  el('rcpRef').textContent = shortRef;
+
+  // Stash the full values for the copy and save actions, so neither has
+  // to re-derive them from the truncated text on screen.
+  receipt = {
+    merchant: merchantName || 'Unknown',
+    amount: paid,
+    date: when.toLocaleString(),
+    iso: when.toISOString(),
+    reference: currentPaymentId,
+  };
+}
+
+let receipt = null;
+
+function receiptText(){
+  if (!receipt) return '';
+  return [
+    'Payment receipt',
+    '',
+    `Paid to    ${receipt.merchant}`,
+    `Amount     $${receipt.amount}`,
+    `Date       ${receipt.date}`,
+    `Reference  ${receipt.reference}`,
+    '',
+    'Keep this reference. It is what identifies this payment if you',
+    'ever need to ask about it.',
+  ].join('\n');
+}
+
+async function copyReference(){
+  if (!receipt) return;
+  try {
+    await navigator.clipboard.writeText(receipt.reference);
+    toast('Reference copied');
+  } catch {
+    // Same fallback the invoice copy uses: the async clipboard API is
+    // refused on older iOS Safari and outside a secure context.
+    const ta = document.createElement('textarea');
+    ta.value = receipt.reference;
+    ta.setAttribute('readonly', '');
+    ta.style.position = 'fixed'; ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select(); ta.setSelectionRange(0, ta.value.length);
+    const ok = document.execCommand('copy');
+    document.body.removeChild(ta);
+    toast(ok ? 'Reference copied' : 'Could not copy — write the reference down');
+  }
+}
+
+function saveReceipt(){
+  if (!receipt) return;
+  // A .txt file rather than a PDF: no library to load on a page a
+  // stranger just opened on mobile data, and every phone can open it.
+  const blob = new Blob([receiptText()], { type: 'text/plain;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `receipt-${receipt.iso.slice(0,10)}-${receipt.reference.slice(0,8)}.txt`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  toast('Receipt saved');
+}
+
+function goBack(){
+  clearInterval(timerInterval);
+  if (realtimeChannel) supabaseClient.removeChannel(realtimeChannel);
+  window.location.href = returnPage;
+}
+
+/* ---------- wiring ----------
+   Listeners rather than inline onclick, so a renamed handler shows up as a
+   missing-element error in testing instead of failing silently at a tap. */
+el('copyBtn').addEventListener('click', copyAddress);
+el('payBtn').addEventListener('click', openCashApp);
+el('helpBtn').addEventListener('click', openModal);
+el('closeBtn').addEventListener('click', goBack);
+el('doneBtn').addEventListener('click', goBack);
+el('rcpCopyBtn').addEventListener('click', copyReference);
+el('rcpSaveBtn').addEventListener('click', saveReceipt);
+el('modalCloseBtn').addEventListener('click', closeModal);
+el('modalGotItBtn').addEventListener('click', closeModal);
+el('qrLink').addEventListener('click', openCashApp);
+el('howToPayModal').addEventListener('click', (e) => {
+  if (e.target === el('howToPayModal')) closeModal();
+});
+</script>
+</body>
+</html>

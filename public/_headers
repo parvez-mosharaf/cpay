@@ -1,0 +1,24 @@
+# Cloudflare Workers static-assets headers (picked up automatically by
+# `wrangler deploy` — no code change needed).
+#
+# Why each header exists:
+#   frame-ancestors 'none' / X-Frame-Options: DENY
+#     → clickjacking protection: nobody can put the payment page or the
+#       admin panel inside an invisible iframe and trick clicks.
+#       If you EVER intentionally iframe the payment page on a creator's
+#       site, change frame-ancestors to list that origin instead.
+#   script-src / style-src keep 'unsafe-inline'
+#     → every page uses inline <script>/<style> blocks by design (no build
+#       step), so a strict CSP would break the site. The policy still
+#       whitelists the only two CDNs scripts may load from, blocks plugins
+#       (object-src 'none') and stops <base> tag hijacks (base-uri 'self').
+#   connect-src
+#     → pages may only talk to the site itself + Supabase (REST, Auth and
+#       the Realtime websocket). Nothing else can be exfiltrated via fetch.
+
+/*
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  X-Frame-Options: DENY
+  Permissions-Policy: camera=(), microphone=(), geolocation=()
+  Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self' https://*.supabase.co wss://*.supabase.co; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'

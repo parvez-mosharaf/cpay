@@ -1,0 +1,10 @@
+.env
+.env.local
+*.key
+node_modules/
+.DS_Store
+.wrangler/
+
+# Never commit ledger snapshots - they contain customer PII
+ledger-backups/
+*.sql.local
