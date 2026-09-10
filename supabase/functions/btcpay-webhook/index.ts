@@ -1,5 +1,5 @@
 // The Supabase Edge Runtime resolves this remote Deno import at deployment time.
-// @ts-expect-error The local TypeScript server cannot resolve URL imports without Deno's resolver.
+// @ts-ignore The local TypeScript server cannot resolve URL imports without Deno's resolver.
 import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 // Local editor/tsserver environments do not always include the Deno globals
