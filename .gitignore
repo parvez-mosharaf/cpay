@@ -1,0 +1,15 @@
+.env
+.env.local
+*.key
+node_modules/
+.DS_Store
+.wrangler/
+
+# Never commit ledger snapshots - they contain customer PII
+ledger-backups/
+*.sql.local
+
+# Editor-local settings can carry personal API tokens (Sourcery, Copilot,
+# etc). .vscode/settings.json has already had one committed once — see
+# AUDIT.md. extensions.json has no secrets and is fine to share.
+.vscode/settings.json

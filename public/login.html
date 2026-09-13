@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Boltpay — Log in</title>
+        <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+          <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+            <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+            <script src="config.js"></script>
+            <script src="theme.js"></script>
+            <style>
+:root{
+  /* Same palette as admin.html, dashboard.html and moderator.html — the
+     old violet/amber scheme below was left over from before that palette
+     was unified, and made the login screen the one page in the app that
+     didn't look like it belonged to it. */
+  --bg:#0B0F0C; --panel:#131916; --panel-hi:#1A221D;
+  --line:rgba(255,255,255,0.07); --line-strong:rgba(255,255,255,0.14);
+  --text:#F2F7F3; --text-dim:rgba(242,247,243,0.55); --text-faint:rgba(242,247,243,0.30);
+  --amber:#00D632; --alert:#FF5C7A; --on-accent:#04240D;
+  --accent-wash:rgba(0,214,50,0.10); --accent-ring:rgba(0,214,50,0.30);
+}
+*{ margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+body{ font-family:var(--font-display,'Space Grotesk',sans-serif); background:var(--bg); color:var(--text);
+  min-height:100vh; display:flex; align-items:center; justify-content:center; padding:20px;
+  background-image: radial-gradient(circle at 15% 0%, var(--glow-a, rgba(0,214,50,0.09)), transparent 45%),
+                     radial-gradient(circle at 85% 10%, var(--glow-b, rgba(0,214,50,0.06)), transparent 40%); }
+
+.card{ background:var(--panel); border:1px solid var(--line); border-radius:20px; padding:32px 28px; width:100%; max-width:380px; }
+.mark{ width:48px; height:48px; border-radius:13px; background:linear-gradient(155deg,var(--amber),#00A82A);
+  display:flex; align-items:center; justify-content:center; margin-bottom:18px; box-shadow:0 0 18px rgba(0,214,50,0.28); }
+h1{ font-size:20px; font-weight:700; margin-bottom:4px; }
+.sub{ font-size:12px; color:var(--text-dim); margin-bottom:24px; }
+
+.field{ margin-bottom:14px; }
+.field label{ font-size:11px; color:var(--text-faint); text-transform:uppercase; letter-spacing:0.6px; font-weight:700; display:block; margin-bottom:6px; }
+.field input{ width:100%; background:var(--panel-hi); border:1px solid var(--line); color:var(--text);
+  padding:12px 14px; border-radius:10px; font-family:'Space Grotesk'; font-size:14px; outline:none; }
+.field input:focus{ border-color:var(--amber); }
+
+.btn-primary{ background:var(--amber); color:var(--on-accent); border:none; padding:13px 20px; border-radius:10px;
+  font-weight:700; font-size:14px; cursor:pointer; width:100%; font-family:'Space Grotesk'; margin-top:4px;
+  box-shadow:0 8px 18px rgba(0,214,50,0.16); transition:filter .16s ease-out, box-shadow .16s ease-out, transform .16s ease-out; }
+.btn-primary:hover:not(:disabled){ filter:brightness(1.08); box-shadow:0 10px 24px rgba(0,214,50,0.25); transform:translateY(-1px); }
+.btn-primary:disabled{ opacity:0.6; cursor:not-allowed; }
+
+.error-msg{ color:var(--alert); font-size:12px; margin-top:12px; display:none; }
+.footer-link{ text-align:center; margin-top:20px; font-size:13px; color:var(--text-dim); }
+.footer-link a{ color:var(--amber); text-decoration:none; font-weight:600; }
+</style>
+          </head>
+          <body>
+            <div class="card">
+              <div class="mark">
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="none">
+                  <path d="M13 2L4 14h6l-1 8 9-12h-6l1-8z" fill="#04240D"/>
+                </svg>
+              </div>
+              <h1>Log in to Boltpay</h1>
+              <div class="sub">Lightning payments for creators and shop owners</div>
+              <div class="field">
+                <label>Email</label>
+                <input type="email" id="email" placeholder="you@example.com" autocomplete="email">
+                </div>
+                <div class="field">
+                  <label>Password</label>
+                  <input type="password" id="password" placeholder="••••••••" autocomplete="current-password">
+                  </div>
+                  <button class="btn-primary" id="submitBtn" onclick="doLogin()">Log in</button>
+                  <div class="error-msg" id="errorMsg">
+                  </div>
+                  <div class="footer-link">Don't have an account? <a href="register.html">Create one</a>
+                </div>
+              </div>
+              <script>
+window.addEventListener('DOMContentLoaded', () => { applyDomainTheme(); });
+window.addEventListener('DOMContentLoaded', async () => {
+  const { data: { session } } = await window.supabaseClient.auth.getSession();
+  if (session) redirectByRole(session.user.id);
+});
+
+async function redirectByRole(userId){
+  const { data: profile } = await window.supabaseClient.from('profiles').select('role').eq('id', userId).single();
+  // Used to be a two-way admin/creator split, so a moderator landed on
+  // dashboard.html — which then bounces anything that isn't 'creator'
+  // straight back here, creating an infinite login<->dashboard redirect.
+  // The only way in was typing /moderator.html directly.
+  // A reseller's default landing is their oversight panel, which links
+  // across to their own dashboard. Both are theirs; this just picks
+  // which one opens first.
+  const dest = profile?.role === 'admin' ? 'admin.html'
+             : profile?.role === 'moderator' ? 'moderator.html'
+             : 'dashboard.html#income';
+  window.location.href = dest;
+}
+
+async function doLogin(){
+  const email = document.getElementById('email').value.trim();
+  const password = document.getElementById('password').value;
+  const errEl = document.getElementById('errorMsg');
+  const btn = document.getElementById('submitBtn');
+  errEl.style.display = 'none';
+
+  if (!email || !password){
+    errEl.textContent = 'Enter both email and password.';
+    errEl.style.display = 'block';
+    return;
+  }
+
+  btn.disabled = true; btn.textContent = 'Logging in…';
+
+  const { data, error } = await window.supabaseClient.auth.signInWithPassword({ email, password });
+
+  if (error){
+    errEl.textContent = error.message;
+    errEl.style.display = 'block';
+    btn.disabled = false; btn.textContent = 'Log in';
+    return;
+  }
+
+  await redirectByRole(data.user.id);
+}
+
+document.getElementById('password').addEventListener('keydown', (e) => { if (e.key === 'Enter') doLogin(); });
+</script>
+            </body>
+          </html>

@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <!-- Boltpay favicon
+       The dollar sign is an outline path, not a <text> element.
+       <text font-family="system-ui"> renders in whatever font the machine
+       happens to have, so the mark came out different on Windows, macOS and
+       Android — different weight, different width, sometimes clipped. It
+       also disappears entirely anywhere without fonts, which includes most
+       SVG-to-PNG converters and some feed readers.
+       As a path it is identical everywhere and depends on nothing.
+
+       Centred on the glyph's own bounding box rather than a baseline
+       percentage: dominant-baseline="central" is unevenly supported and,
+       stacked on y="54%", was shifting the mark twice. -->
+  <rect x="0" y="0" width="512" height="512" rx="100" ry="100" fill="#00D632"/>
+  <g transform="translate(163.85 358.77) scale(0.13795 -0.13795)">
+    <path fill="#FFFFFF" d="M580 -220V1710H769V-220ZM675 -24Q484 -24 349.0 36.5Q214 97 142.0 212.0Q70 327 70 489H367Q369 407 406.5 349.0Q444 291 513.0 260.0Q582 229 677 229Q763 229 826.5 252.5Q890 276 925.5 319.0Q961 362 961 420Q961 468 933.5 503.5Q906 539 847.5 566.0Q789 593 694 613L537 647Q315 695 207.0 798.0Q99 901 99 1061Q99 1197 170.0 1298.5Q241 1400 368.5 1457.0Q496 1514 665 1514Q836 1514 961.0 1456.0Q1086 1398 1155.5 1290.5Q1225 1183 1230 1033H942Q934 1139 860.0 1200.0Q786 1261 666 1261Q591 1261 532.5 1237.5Q474 1214 440.5 1172.5Q407 1131 407 1076Q407 1030 433.0 996.5Q459 963 516.0 938.0Q573 913 664 893L807 862Q926 836 1013.0 798.5Q1100 761 1156.0 709.5Q1212 658 1239.0 591.0Q1266 524 1266 440Q1266 297 1194.5 192.5Q1123 88 990.5 32.0Q858 -24 675 -24Z"/>
+  </g>
+</svg>

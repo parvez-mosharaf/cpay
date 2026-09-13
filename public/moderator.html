@@ -1,0 +1,801 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Boltpay — Payment review</title>
+    <meta name="robots" content="noindex, nofollow">
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="config.js"></script>
+    <style>
+:root{
+  /* One palette for admin, dashboard and moderator — the same near-black
+     and Cash App green as the home page and the payment card. */
+  --bg:#0B0F0C; --panel:#131916; --panel-hi:#1A221D;
+  --line:rgba(255,255,255,0.07); --line-strong:rgba(255,255,255,0.14);
+  --text:#F2F7F3; --text-dim:rgba(242,247,243,0.55); --text-faint:rgba(242,247,243,0.30);
+  --amber:#00D632; --green:#00D632; --violet:#69F28D; --ok:#00D632;
+  --alert:#FF5C7A; --warn:#F5A623;
+  --on-accent:#04240D;
+  --accent-wash:rgba(0,214,50,0.10); --accent-ring:rgba(0,214,50,0.30); --accent-deep:#04240D;
+  --green-soft:rgba(0,214,50,0.10); --violet-soft:rgba(105,242,141,0.10);
+  --alert-soft:rgba(255,92,122,0.12); --warn-soft:rgba(245,163,35,0.12);
+  --surface:#131916; --sidebar:#0B0F0C; --sidebar-hi:#1A221D;
+  --sidebar-line:rgba(255,255,255,0.06);
+  --gold:#00D632; --bronze:#69F28D;
+}
+
+/* Compact type: more rows per screen without dropping any field. */
+html{ font-size:15px; }
+*{ margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+body{ font-family:'Space Grotesk',sans-serif; background:var(--bg); color:var(--text); min-height:100vh; padding-bottom:48px; }
+.mono{ font-family:'JetBrains Mono',monospace; }
+
+#loginScreen{ min-height:100vh; display:flex; align-items:center; justify-content:center; padding:20px; }
+.login-card{ background:var(--panel); border:1px solid var(--line); border-radius:20px; padding:32px 28px; width:100%; max-width:360px; }
+.login-mark{ width:48px; height:48px; border-radius:13px; background:linear-gradient(155deg,var(--amber),#d98a12);
+  display:flex; align-items:center; justify-content:center; margin-bottom:18px; box-shadow:0 0 18px rgba(245,166,35,0.3); }
+.login-title{ font-size:19px; font-weight:700; margin-bottom:4px; }
+.login-sub{ font-size:12px; color:var(--text-dim); margin-bottom:22px; }
+.field{ margin-bottom:12px; }
+.field label{ font-size:11px; color:var(--text-faint); text-transform:uppercase; letter-spacing:0.6px; font-weight:700; display:block; margin-bottom:6px; }
+.field input{ width:100%; background:var(--panel-hi); border:1px solid var(--line); color:var(--text); padding:12px 13px;
+  border-radius:10px; font-family:'Space Grotesk'; font-size:13px; outline:none; }
+.btn-primary{ background:var(--amber); color:var(--on-accent); border:none; border-radius:11px; padding:13px; font-size:14px;
+  font-weight:700; cursor:pointer; font-family:inherit; width:100%; }
+.btn-primary:disabled{ opacity:.6; cursor:not-allowed; }
+.login-err{ display:none; color:var(--alert); font-size:12.5px; margin-top:12px; text-align:center; }
+
+.topbar{ display:flex; align-items:center; justify-content:space-between; gap:12px; padding:16px 20px;
+  border-bottom:1px solid var(--line); background:var(--panel); position:sticky; top:0; z-index:10; }
+.brand{ display:flex; align-items:center; gap:11px; min-width:0; }
+.brand-mark{ width:38px; height:38px; border-radius:11px; background:linear-gradient(155deg,var(--amber),#d98a12);
+  display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+.brand-name{ font-size:15px; font-weight:700; }
+.brand-sub{ font-size:11px; color:var(--text-dim); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.btn-ghost{ background:var(--panel-hi); color:var(--text-dim); border:1px solid var(--line); border-radius:10px;
+  padding:9px 15px; font-size:13px; font-weight:600; cursor:pointer; font-family:inherit; flex-shrink:0; }
+
+.wrap{ max-width:900px; margin:0 auto; padding:20px; }
+.panel{ background:var(--panel); border:1px solid var(--line); border-radius:16px; padding:18px; margin-bottom:16px; }
+.panel-head{ display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; gap:10px; }
+.panel-title{ font-size:15px; font-weight:700; }
+.count-pill{ background:rgba(245,166,35,.14); color:var(--amber); border-radius:20px; padding:3px 11px; font-size:12px; font-weight:700; }
+.search-row{ display:flex; gap:9px; margin-bottom:14px; }
+.search-row input{ flex:1; background:var(--panel-hi); border:1px solid var(--line); color:var(--text);
+  padding:12px 13px; border-radius:11px; font-family:inherit; font-size:13px; outline:none; }
+
+.stats-grid{ display:grid; grid-template-columns:repeat(2,1fr); gap:8px; margin-bottom:12px; }
+@media (min-width:700px){ .stats-grid{ grid-template-columns:repeat(4,1fr); } }
+.stat-card{ background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:11px 12px; }
+.stat-label{ font-size:9px; color:var(--text-faint); text-transform:uppercase; letter-spacing:1px; font-weight:700; margin-bottom:5px; }
+.stat-val{ font-size:17px; font-weight:700; font-family:'JetBrains Mono'; }
+.stat-val.ok{ color:var(--ok); } .stat-val.alert{ color:var(--alert); }
+.stat-sub{ font-size:10px; color:var(--text-faint); margin-top:4px; }
+.cr-row{ display:flex; align-items:center; gap:10px; background:var(--panel-hi); border:1px solid var(--line); border-radius:12px; padding:10px 12px; margin-bottom:7px; }
+.cr-name{ font-size:13px; font-weight:700; }
+.cr-email{ font-size:10px; color:var(--text-faint); }
+.cr-nums{ margin-left:auto; text-align:right; font-family:'JetBrains Mono'; }
+.cr-settled{ font-size:13px; font-weight:700; color:var(--ok); }
+.cr-sub{ font-size:9px; color:var(--text-faint); margin-top:2px; }
+.daily-current{ background:var(--panel-hi); border:1px solid var(--line-strong,var(--line)); border-radius:12px; padding:12px 14px; margin-bottom:4px; }
+.daily-current .dc-label{ font-size:9px; color:var(--text-faint); text-transform:uppercase; letter-spacing:1px; font-weight:700; margin-bottom:6px; }
+.daily-current .dc-total{ font-size:22px; font-weight:700; font-family:'JetBrains Mono'; color:var(--ok); }
+.daily-current .dc-sub{ font-size:10.5px; color:var(--text-dim); margin-top:4px; }
+.daily-row{ display:flex; align-items:center; gap:10px; background:var(--panel-hi); border:1px solid var(--line); border-radius:11px; padding:9px 12px; margin-bottom:6px; }
+.daily-date{ font-size:11px; font-weight:700; color:var(--text-dim); width:64px; flex-shrink:0; font-family:'JetBrains Mono'; }
+.daily-breakdown{ flex:1; min-width:0; font-size:10.5px; color:var(--text-faint); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.daily-total{ font-size:13px; font-weight:700; color:var(--ok); font-family:'JetBrains Mono'; flex-shrink:0; }
+.cost-chip{ display:inline-block; background:rgba(0,214,50,.14); color:var(--ok); border-radius:20px; padding:1px 7px; font-size:10px; font-weight:700; vertical-align:middle; }
+.pay-field-value.with-copy{ display:flex; align-items:center; gap:8px; white-space:nowrap; }
+.pay-field-value.with-copy span{ overflow:hidden; text-overflow:ellipsis; }
+.pay-field-value .ln-value{ color:var(--ok); }
+.copy-mini{ background:rgba(255,255,255,0.05); border:1px solid var(--line); color:var(--ok); cursor:pointer; font-size:10px; font-weight:700; padding:2px 6px; border-radius:6px; font-family:inherit; }
+.pay-sub{ font-size:11px; color:var(--text-dim); margin-top:2px; }
+.pay-row{ background:var(--panel-hi); border:1px solid var(--line); border-radius:14px; padding:14px 16px; margin-bottom:9px; }
+.pay-row.marked{ border-color:rgba(92,224,160,.45); }
+.pay-top{ display:flex; justify-content:space-between; align-items:flex-start; gap:12px; }
+.pay-amt{ font-size:20px; font-weight:700; font-family:'JetBrains Mono'; line-height:1.1; }
+.pay-sub{ font-size:12px; color:var(--text-dim); margin-top:3px; }
+.badge{ padding:4px 11px; border-radius:20px; font-size:11px; font-weight:700; white-space:nowrap;
+  background:rgba(92,224,160,.14); color:var(--ok); }
+.badge.unmarked{ background:rgba(245,243,255,.07); color:var(--text-faint); }
+.pay-grid{ display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:10px 18px;
+  margin-top:12px; padding-top:12px; border-top:1px solid var(--line); }
+.pay-field-label{ font-size:9px; letter-spacing:.09em; text-transform:uppercase; color:var(--text-faint); font-weight:700; margin-bottom:3px; }
+.pay-field-value{ font-size:12px; font-family:'JetBrains Mono'; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.pay-field.wide{ grid-column:1 / -1; }
+.mark-note{ font-size:12px; color:var(--ok); margin-top:10px; }
+.actions{ display:flex; gap:8px; margin-top:12px; flex-wrap:wrap; }
+.act-btn{ padding:9px 18px; border-radius:9px; border:none; font-weight:700; font-size:13px; cursor:pointer; font-family:inherit; }
+.act-mark{ background:var(--ok); color:var(--on-accent); }
+.act-unmark{ background:#3a1b28; color:var(--alert); }
+.act-btn:disabled{ opacity:.6; cursor:not-allowed; }
+.empty-state{ text-align:center; color:var(--text-faint); font-size:13px; padding:28px 0; }
+#toast{ position:fixed; left:50%; bottom:24px; transform:translateX(-50%); background:var(--panel-hi);
+  border:1px solid var(--line); padding:12px 20px; border-radius:11px; font-size:13px; font-weight:600;
+  display:none; z-index:100; max-width:90%; text-align:center; }
+#toast.ok{ border-color:rgba(92,224,160,.5); color:var(--ok); }
+#toast.err{ border-color:rgba(255,92,122,.5); color:var(--alert); }
+    
+/* ---------- Compact scale ----------
+   Appended last so it overrides the sizes above without editing them.
+   Every field stays; only the scale tightens, so noticeably more fits on
+   one screen. */
+.stat-card{ padding:11px 12px !important; border-radius:12px !important; }
+.stat-label{ font-size:9px !important; margin-bottom:5px !important; }
+.stat-val{ font-size:17px !important; }
+.stat-sub{ font-size:10px !important; margin-top:4px !important; }
+.stats-grid{ gap:8px !important; margin-bottom:12px !important; }
+
+.panel{ padding:13px !important; margin-bottom:11px !important; border-radius:14px !important; }
+.panel-head{ margin-bottom:10px !important; }
+.panel-title{ font-size:13px !important; }
+.panel-sub{ font-size:10px !important; }
+
+.tab-btn, .nav-btn, .range-btn{ padding:7px 12px !important; font-size:12px !important; border-radius:9px !important; }
+.tabs, .section-nav, .range-bar{ gap:6px !important; margin-bottom:11px !important; }
+
+.wd-row, .link-row, .cust-row, .pay-row, .tx-row{
+  padding:10px 12px !important; margin-bottom:7px !important; border-radius:12px !important;
+}
+.wd-amt{ font-size:16px !important; }
+.wd-meta{ font-size:10px !important; }
+.wd-dest{ font-size:11px !important; margin-top:4px !important; }
+.wd-actions{ margin-top:8px !important; gap:5px !important; }
+.act-btn{ padding:6px 12px !important; font-size:11px !important; border-radius:8px !important; }
+
+.link-slug{ font-size:13px !important; }
+.link-owner{ font-size:10px !important; }
+.link-stats{ font-size:10px !important; margin-top:4px !important; }
+
+.cust-name{ font-size:13px !important; }
+.cust-email{ font-size:10px !important; }
+.cust-earned{ font-size:13px !important; }
+.cust-sub{ font-size:9px !important; }
+.cust-rank{ font-size:11px !important; width:22px !important; }
+
+.w-input, .filter-select{ padding:9px 11px !important; font-size:12px !important; border-radius:9px !important; }
+.btn-primary{ padding:10px 16px !important; font-size:12px !important; }
+.badge{ padding:3px 8px !important; font-size:9px !important; }
+.empty-state{ padding:20px 10px !important; font-size:12px !important; }
+.detail-stat{ padding:9px !important; }
+.detail-stat-val{ font-size:14px !important; }
+.detail-stat-label{ font-size:8px !important; }
+.detail-section-title{ font-size:11px !important; margin:12px 0 8px !important; }
+.header{ padding:11px 16px !important; }
+.content{ padding:14px 14px !important; }
+.msg-bubble{ padding:8px 11px !important; font-size:12px !important; margin-bottom:6px !important; }
+
+
+/* ---------- Payment card: collapsed summary + tap-to-expand ----------
+   Ekta payment row ekhon dekhay: amount + email + status badge + caret.
+   Puro details (link, method, location, invoice ids, mark actions) hidden
+   thake .pay-details er moddhe, tap korle .open class add hoy ar smooth
+   slide-open hoy. Phone e 6-8 ta payment ek screen e boshbe. */
+.pay-row{ padding:10px 12px !important; cursor:pointer; transition:border-color .15s; }
+.pay-row:hover{ border-color:rgba(255,255,255,.14); }
+.pay-summary{ display:flex; justify-content:space-between; align-items:center; gap:12px; }
+.pay-summary-right{ display:flex; align-items:center; gap:8px; flex-shrink:0; }
+.pay-caret{ font-size:18px; color:var(--text-faint); line-height:1; transition:transform .2s; }
+.pay-row.open .pay-caret{ transform:rotate(90deg); color:var(--ok); }
+.pay-details{
+  max-height:0; overflow:hidden; opacity:0;
+  transition:max-height .25s ease, opacity .2s ease, margin-top .25s ease;
+  margin-top:0;
+}
+.pay-row.open .pay-details{ max-height:800px; opacity:1; margin-top:2px; }
+
+/* Amount + email stay compact even on the summary row */
+.pay-amt{ font-size:15px !important; font-weight:700; font-family:'JetBrains Mono'; line-height:1.1; }
+.pay-sub{ font-size:10.5px !important; margin-top:2px !important; color:var(--text-dim); }
+
+/* Details grid tighter than before — the panel's already narrow, and
+   nested inside a tap-open row it must not double-scroll. */
+.pay-grid{
+  grid-template-columns:repeat(auto-fit, minmax(108px, 1fr)) !important;
+  gap:5px 12px !important;
+  margin-top:8px !important;
+  padding-top:8px !important;
+}
+.pay-field-label{ font-size:8px !important; letter-spacing:.08em !important; margin-bottom:1px !important; }
+.pay-field-value{ font-size:10.5px !important; }
+.mark-note{ font-size:10px !important; margin-top:6px !important; }
+.actions{ margin-top:7px !important; gap:5px !important; }
+
+/* Status badge palette (only 'settled/checked/unmarked' existed before) */
+.badge.pending{ background:rgba(245,166,35,.16); color:var(--amber); }
+.badge.expired{ background:rgba(255,92,122,.14); color:var(--alert); }
+
+/* ---------- Tabs + filters (v3) ---------- */
+.mod-tabs{ display:flex; gap:6px; margin-bottom:11px; }
+.mod-tab{ padding:7px 14px; border-radius:9px; border:1px solid var(--line);
+  background:var(--panel); color:var(--text-dim); font-weight:700; font-size:12px;
+  cursor:pointer; font-family:inherit; }
+.mod-tab.active{ background:var(--panel-hi); color:var(--ok); border-color:rgba(92,224,160,.4); }
+.filter-row{ display:flex; gap:8px; margin-bottom:12px; }
+.filter-select{ flex:1; background:var(--panel-hi); border:1px solid var(--line);
+  color:var(--text); padding:9px 11px; border-radius:9px; font-family:inherit;
+  font-size:12px; outline:none; }
+#paymentsMoreWrap{ margin-top:10px !important; }
+#loadMoreBtn{ min-width:150px; }
+</style>
+  </head>
+  <body>
+
+    <div id="loginScreen">
+      <div class="login-card">
+        <div class="login-mark">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="#241a02"><path d="M13 2 3 14h7l-1 8 10-12h-7l1-8z"/></svg>
+        </div>
+        <div class="login-title">Payment review</div>
+        <div class="login-sub">Staff access — payment history only</div>
+        <div class="field">
+          <label for="loginEmail">Email</label>
+          <input type="email" id="loginEmail" autocomplete="username">
+        </div>
+        <div class="field">
+          <label for="loginPassword">Password</label>
+          <input type="password" id="loginPassword" autocomplete="current-password">
+        </div>
+        <button class="btn-primary" id="loginBtn">Sign in</button>
+        <div class="login-err" id="loginError"></div>
+      </div>
+    </div>
+
+    <div id="app" style="display:none;">
+      <div class="topbar">
+        <div class="brand">
+          <div class="brand-mark">
+            <svg width="19" height="19" viewBox="0 0 24 24" fill="#241a02"><path d="M13 2 3 14h7l-1 8 10-12h-7l1-8z"/></svg>
+          </div>
+          <div style="min-width:0;">
+            <div class="brand-name">Payment review</div>
+            <div class="brand-sub" id="whoami"></div>
+          </div>
+        </div>
+        <a class="btn-ghost" href="dashboard.html" style="text-decoration:none; display:inline-flex; align-items:center;">My earnings</a>
+        <button class="btn-ghost" id="logoutBtn">Log out</button>
+      </div>
+
+      <div class="wrap">
+        <!-- Same picture the admin gets, narrowed to the creators assigned
+             to this moderator. The narrowing happens in the database, in
+             staff_global_stats(), not here. -->
+        <div class="stats-grid">
+          <div class="stat-card">
+            <div class="stat-label">Total settled</div>
+            <div class="stat-val ok" id="mStatSettled">$0.00</div>
+            <div class="stat-sub" id="mStatCount">0 payments</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Total withdrawn</div>
+            <div class="stat-val" id="mStatWithdrawn">$0.00</div>
+            <div class="stat-sub" id="mStatCreators">0 creators</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Pending payouts</div>
+            <div class="stat-val alert" id="mStatPending">$0.00</div>
+            <div class="stat-sub" id="mStatPendingCount">0 requests</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Marked</div>
+            <div class="stat-val" id="mStatMarked">0</div>
+            <div class="stat-sub">of the payments below</div>
+          </div>
+        </div>
+
+        <!-- Tab bar, top-left: Payments | My creators. Payments is the
+             default because review is the moderator's main job; creators
+             is reference info. -->
+        <div class="mod-tabs">
+          <button class="mod-tab active" id="tabPaymentsBtn" onclick="showModTab('payments')">Payments</button>
+          <button class="mod-tab" id="tabCreatorsBtn" onclick="showModTab('creators')">My creators</button>
+          <button class="mod-tab" id="tabDailyBtn" onclick="showModTab('daily')">Daily settled</button>
+        </div>
+
+        <div class="panel" id="tabCreators" style="display:none;">
+          <div class="panel-head">
+            <div class="panel-title">My creators</div>
+            <span class="count-pill" id="creatorsPill">0</span>
+          </div>
+          <div id="creatorsList"><div class="empty-state">Loading…</div></div>
+        </div>
+
+        <!-- Live, not stored: every cell here is computed fresh from the
+             payments table on each load, on a 5:00 PM – 5:00 PM Dhaka
+             cycle rather than midnight-to-midnight. Nothing here is a
+             cron job or a backup — refresh the page and it recomputes. -->
+        <div class="panel" id="tabDaily" style="display:none;">
+          <div class="panel-head">
+            <div class="panel-title">Daily settled &middot; 5pm–5pm (Asia/Dhaka)</div>
+            <button class="btn-ghost" style="padding:6px 12px; font-size:11px;" onclick="loadDaily()">Refresh</button>
+          </div>
+          <div class="daily-current" id="dailyCurrent"></div>
+          <div class="panel-sub" style="margin:14px 0 8px;">Previous cycles</div>
+          <div id="dailyList"><div class="empty-state">Loading…</div></div>
+        </div>
+
+        <div class="panel" id="tabPayments">
+          <div class="panel-head">
+            <div class="panel-title">All payments</div>
+            <span class="count-pill" id="countPill">0</span>
+          </div>
+          <div class="search-row">
+            <input type="text" id="searchInput" placeholder="Invoice ID, Lightning address or link name">
+            <button class="btn-primary" style="width:auto; padding:12px 20px;" id="searchBtn">Search</button>
+          </div>
+          <div class="filter-row">
+            <select class="filter-select" id="statusFilter">
+              <option value="">All Status</option>
+              <option value="settled">Settled</option>
+              <option value="new">New</option>
+              <option value="pending">Pending</option>
+              <option value="expired">Expired</option>
+              <option value="invalid">Invalid</option>
+            </select>
+            <select class="filter-select" id="timeFilter">
+              <option value="">All Time</option>
+              <option value="today">Today</option>
+              <option value="7d">7 days</option>
+              <option value="30d">30 days</option>
+            </select>
+          </div>
+          <div id="paymentsList"><div class="empty-state">Loading…</div></div>
+          <div class="actions" id="paymentsMoreWrap" style="display:none; justify-content:center;">
+            <button class="act-btn act-mark" id="loadMoreBtn" type="button">Load more</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="toast"></div>
+
+    <script>
+// Same delegated copy handler as the admin panel.
+document.addEventListener('click', function(e){
+  const btn = e.target.closest('[data-copy]');
+  if (!btn) return;
+  navigator.clipboard.writeText(btn.getAttribute('data-copy'));
+  showToast('Copied', 'ok');
+});
+
+let currentUser = null;
+let rows = [];
+const PAYMENT_PAGE_SIZE = 120;
+let paymentsOffset = 0;
+let paymentsHasMore = false;
+let paymentsLoading = false;
+
+function el(id){ return document.getElementById(id); }
+function escapeHtml(s){ return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function escapeAttr(s){ return escapeHtml(s).replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
+function safeText(v, fb){ return escapeHtml(v == null || v === '' ? (fb ?? '—') : v); }
+function fmtDate(d){ return d ? new Date(d).toLocaleString('en-US',{ day:'numeric', month:'short', hour:'2-digit', minute:'2-digit' }) : '—'; }
+
+function showToast(msg, type){
+  const t = el('toast');
+  t.textContent = msg; t.className = type || '';
+  t.style.display = 'block';
+  clearTimeout(showToast._t);
+  showToast._t = setTimeout(() => { t.style.display = 'none'; }, 3200);
+}
+
+
+/* ============ Idle session timeout ============
+   This panel can move money: mark a payment settled, approve a payout,
+   change a fee, grant staff access. A session left open on an unattended
+   laptop is the whole of that authority sitting unlocked.
+
+   Supabase tokens refresh on their own and would otherwise keep a tab
+   signed in indefinitely. Twenty minutes of no keyboard, mouse or touch
+   ends it. Any real interaction resets the clock, so this never
+   interrupts someone actually working. */
+const IDLE_LIMIT_MS = 20 * 60 * 1000;
+let idleTimer = null;
+
+function resetIdleTimer(){
+  if (idleTimer) clearTimeout(idleTimer);
+  idleTimer = setTimeout(async () => {
+    try { await window.supabaseClient.auth.signOut(); } catch (e) { /* sign out anyway */ }
+    // Reload rather than just hiding the panel: it clears every array
+    // still holding customer data in memory.
+    window.location.replace(window.location.pathname + '?timeout=1');
+  }, IDLE_LIMIT_MS);
+}
+
+['click','keydown','touchstart','scroll','mousemove'].forEach(evt =>
+  window.addEventListener(evt, resetIdleTimer, { passive: true })
+);
+resetIdleTimer();
+
+// Tell them why they are back at the login screen, rather than leaving
+// them wondering whether something broke.
+if (new URLSearchParams(window.location.search).get('timeout') === '1'){
+  window.addEventListener('DOMContentLoaded', () => {
+    const err = document.getElementById('loginError');
+    if (err){
+      err.textContent = 'Signed out after 20 minutes of inactivity.';
+      err.style.display = 'block';
+    }
+  });
+}
+
+async function doLogin(){
+  const email = el('loginEmail').value.trim();
+  const password = el('loginPassword').value;
+  const errEl = el('loginError');
+  const btn = el('loginBtn');
+  errEl.style.display = 'none';
+  btn.disabled = true;
+
+  try {
+    const { data, error } = await window.supabaseClient.auth.signInWithPassword({ email, password });
+    if (error){ errEl.textContent = error.message; errEl.style.display = 'block'; return; }
+
+    const { data: profile } = await window.supabaseClient
+      .from('profiles').select('role, display_name, email').eq('id', data.user.id).single();
+
+    // Admins are allowed in too — the panel is a subset of what they can
+    // already do, so there is no reason to lock them out of it.
+    if (profile?.role !== 'moderator' && profile?.role !== 'admin'){
+      await window.supabaseClient.auth.signOut();
+      errEl.textContent = 'This account does not have review access.';
+      errEl.style.display = 'block';
+      return;
+    }
+    currentUser = { ...data.user, ...profile };
+    enterApp();
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+function enterApp(){
+  el('loginScreen').style.display = 'none';
+  el('app').style.display = 'block';
+  el('whoami').textContent = currentUser.email || '';
+  loadStats();
+  loadCreators();
+  loadPayments();
+}
+
+async function loadStats(){
+  const { data, error } = await window.supabaseClient.rpc('staff_global_stats', {
+    p_start: null, p_end: null,
+  });
+  if (error) return;
+  const r = Array.isArray(data) ? data[0] : data;
+  if (!r) return;
+  const set = (id, v) => { const e = el(id); if (e) e.textContent = v; };
+  set('mStatSettled',     '$' + parseFloat(r.total_settled).toFixed(2));
+  set('mStatCount',       r.payment_count + ' payments');
+  set('mStatWithdrawn',   '$' + parseFloat(r.total_withdrawn).toFixed(2));
+  set('mStatCreators',    r.creator_count + ' creators');
+  set('mStatPending',     '$' + parseFloat(r.pending_withdrawals_amount).toFixed(2));
+  set('mStatPendingCount', r.pending_withdrawals_count + ' requests');
+}
+
+async function loadDaily(){
+  const box = el('dailyCurrent');
+  const list = el('dailyList');
+  box.innerHTML = '<div class="empty-state">Loading…</div>';
+  list.innerHTML = '';
+
+  const { data, error } = await window.supabaseClient.rpc('staff_daily_settled', { p_days: 14 });
+  if (error){
+    box.innerHTML = `<div class="empty-state">${escapeHtml(error.message)}</div>`;
+    return;
+  }
+  const rows = data || [];
+  if (!rows.length){
+    box.innerHTML = '<div class="empty-state">No creators assigned to you yet</div>';
+    return;
+  }
+
+  // Rows arrive as (creator x cycle_date). Group by cycle_date so each day
+  // shows one total plus a per-creator breakdown, newest first.
+  const byDate = new Map();
+  for (const r of rows){
+    if (!byDate.has(r.cycle_date)) byDate.set(r.cycle_date, []);
+    byDate.get(r.cycle_date).push(r);
+  }
+  const dates = [...byDate.keys()].sort().reverse();
+  const today = dates[0];
+  const rest = dates.slice(1);
+
+  function dayTotal(entries){ return entries.reduce((s, r) => s + parseFloat(r.settled), 0); }
+  function dayCount(entries){ return entries.reduce((s, r) => s + Number(r.payment_count), 0); }
+  function breakdown(entries){
+    return entries.filter(r => parseFloat(r.settled) > 0)
+      .sort((a, b) => parseFloat(b.settled) - parseFloat(a.settled))
+      .map(r => `${safeText(r.creator_name || r.creator_email)} $${parseFloat(r.settled).toFixed(2)}`)
+      .join(' · ') || 'No settled payments this cycle';
+  }
+
+  if (today){
+    const entries = byDate.get(today);
+    box.innerHTML = `
+      <div class="dc-label">Current cycle · started ${fmtDate(entries[0].cycle_start)}</div>
+      <div class="dc-total">$${dayTotal(entries).toFixed(2)}</div>
+      <div class="dc-sub">${dayCount(entries)} settled payment${dayCount(entries) === 1 ? '' : 's'} · ${breakdown(entries)}</div>`;
+  }
+
+  list.innerHTML = rest.map(d => {
+    const entries = byDate.get(d);
+    const dt = new Date(entries[0].cycle_start);
+    const label = dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    return `
+      <div class="daily-row">
+        <div class="daily-date">${label}</div>
+        <div class="daily-breakdown">${breakdown(entries)}</div>
+        <div class="daily-total">$${dayTotal(entries).toFixed(2)}</div>
+      </div>`;
+  }).join('') || '<div class="empty-state">No earlier cycles yet</div>';
+}
+
+async function loadCreators(){
+  const { data, error } = await window.supabaseClient.rpc('staff_customer_totals');
+  if (error) return;
+  const list = data || [];
+  el('creatorsPill').textContent = list.length;
+  if (!list.length){
+    el('creatorsList').innerHTML = '<div class="empty-state">No creators assigned to you yet</div>';
+    return;
+  }
+  el('creatorsList').innerHTML = list.map(c => `
+    <div class="cr-row">
+      <div style="min-width:0;">
+        <div class="cr-name">${safeText(c.display_name || c.email)}</div>
+        <div class="cr-email">${safeText(c.email)}</div>
+      </div>
+      <div class="cr-nums">
+        <div class="cr-settled">$${parseFloat(c.settled).toFixed(2)}</div>
+        <div class="cr-sub">${c.payment_count} paid · $${parseFloat(c.withdrawn).toFixed(2)} out · $${parseFloat(c.pending).toFixed(2)} pending</div>
+      </div>
+    </div>`).join('');
+}
+
+function serverTimeFilterValue(){
+  return el('timeFilter')?.value || '';
+}
+
+function serverStatusFilterValue(){
+  return el('statusFilter')?.value || '';
+}
+
+function updateLoadMoreUi(){
+  const wrap = el('paymentsMoreWrap');
+  const btn = el('loadMoreBtn');
+  if (!wrap || !btn) return;
+  wrap.style.display = paymentsHasMore ? 'flex' : 'none';
+  btn.disabled = paymentsLoading;
+  btn.textContent = paymentsLoading ? 'Loading…' : 'Load more';
+}
+
+async function loadPayments(reset = true){
+  if (paymentsLoading) return;
+  const search = el('searchInput').value.trim();
+  const status = serverStatusFilterValue();
+  const time = serverTimeFilterValue();
+  if (reset){
+    paymentsOffset = 0;
+    paymentsHasMore = false;
+    rows = [];
+    el('paymentsList').innerHTML = '<div class="empty-state">Loading…</div>';
+    updateLoadMoreUi();
+  }
+
+  paymentsLoading = true;
+  updateLoadMoreUi();
+  const { data, error } = await window.supabaseClient
+    .rpc('staff_list_payments', {
+      p_limit: PAYMENT_PAGE_SIZE,
+      p_offset: paymentsOffset,
+      p_search: search || null,
+      p_status: status || null,
+      p_time: time || null
+    });
+
+  paymentsLoading = false;
+
+  if (error){
+    paymentsHasMore = false;
+    updateLoadMoreUi();
+    el('paymentsList').innerHTML = '<div class="empty-state">' + escapeHtml(error.message) + '</div>';
+    return;
+  }
+
+  const batch = data || [];
+  rows = reset ? batch : rows.concat(batch);
+  paymentsOffset += batch.length;
+  paymentsHasMore = batch.length === PAYMENT_PAGE_SIZE;
+  const e = el('mStatMarked');
+  if (e) e.textContent = rows.filter(r => r.marked_at).length;
+  render();
+  updateLoadMoreUi();
+}
+
+function render(){
+  el('countPill').textContent = rows.length;
+  if (!rows.length){
+    el('paymentsList').innerHTML = '<div class="empty-state">No payments found</div>';
+    return;
+  }
+
+  // Same card the admin panel shows — location, payer cost, method and the
+  // Lightning invoice were all missing here, which made the two panels
+  // disagree about the same payment.
+  el('paymentsList').innerHTML = rows.map(p => {
+    const marked = !!p.marked_at;
+    const inv = p.btcpay_invoice_id || '';
+    const shortInv = inv ? (inv.length > 20 ? inv.slice(0,8) + '\u2026' + inv.slice(-8) : inv) : '\u2014';
+    const ln = p.lightning_invoice || '';
+    const shortLn = ln.length > 26 ? ln.slice(0,16) + '\u2026' + ln.slice(-10) : ln;
+    const where = [p.customer_city, p.customer_country].filter(Boolean).join(', ') || 'Unknown location';
+    const cost = p.surcharge_percent != null
+      ? ` <span class="cost-chip">${parseFloat(p.surcharge_percent)}%</span>` : '';
+    const amt = parseFloat(p.amount_settled ?? p.amount_requested).toFixed(2);
+    const status = String(p.status || '').toLowerCase();
+    // Status-driven badge — same colour vocabulary the admin panel uses,
+    // so a moderator can eyeball state without reading text.
+    let statusBadge;
+    if (status === 'settled')      statusBadge = marked
+        ? '<span class="badge">checked</span>'
+        : '<span class="badge">settled</span>';
+    else if (status === 'new' || status === 'pending')
+      statusBadge = `<span class="badge pending">${status}</span>`;
+    else if (status === 'expired' || status === 'invalid')
+      statusBadge = `<span class="badge expired">${status}</span>`;
+    else statusBadge = `<span class="badge unmarked">${escapeHtml(status || 'unknown')}</span>`;
+
+    // Full details block (hidden until tapped). Same fields as before —
+    // Link, method, created, location, settled at, creator, invoice IDs,
+    // mark line + action buttons — but the whole block is one collapsible
+    // <div>, and the scale is one notch tighter (.pay-details rules below).
+    const detailsInner = `
+        <div class="pay-grid">
+          <div class="pay-field">
+            <div class="pay-field-label">Link &amp; payer cost</div>
+            <div class="pay-field-value">&#127758; ${safeText(p.link_slug)}${cost}</div>
+          </div>
+          <div class="pay-field">
+            <div class="pay-field-label">Method</div>
+            <div class="pay-field-value">${escapeHtml(String(p.method || 'lightning').toUpperCase())}</div>
+          </div>
+          <div class="pay-field">
+            <div class="pay-field-label">Created</div>
+            <div class="pay-field-value">${fmtDate(p.created_at)}</div>
+          </div>
+          <div class="pay-field">
+            <div class="pay-field-label">Location</div>
+            <div class="pay-field-value">&#128205; ${escapeHtml(where)}</div>
+          </div>
+          ${p.settled_at ? `<div class="pay-field">
+            <div class="pay-field-label">Settled at</div>
+            <div class="pay-field-value">${fmtDate(p.settled_at)}</div>
+          </div>` : ''}
+          <div class="pay-field">
+            <div class="pay-field-label">Creator</div>
+            <div class="pay-field-value">${safeText(p.creator_name)}</div>
+          </div>
+          <div class="pay-field wide">
+            <div class="pay-field-label">Invoice ID</div>
+            <div class="pay-field-value with-copy">
+              <span>${escapeHtml(shortInv)}</span>
+              ${inv ? `<button class="copy-mini" data-copy="${escapeAttr(inv)}">copy</button>` : ''}
+            </div>
+          </div>
+          ${ln ? `<div class="pay-field wide">
+            <div class="pay-field-label">Lightning invoice</div>
+            <div class="pay-field-value with-copy">
+              <span class="ln-value">${escapeHtml(shortLn)}</span>
+              <button class="copy-mini" data-copy="${escapeAttr(ln)}">copy</button>
+            </div>
+          </div>` : ''}
+        </div>
+        ${marked ? `<div class="mark-note">&#10003; Checked by ${safeText(p.marked_by_name, 'staff')} on ${fmtDate(p.marked_at)}${p.mark_note ? ' \u2014 ' + escapeHtml(p.mark_note) : ''}</div>` : ''}
+        ${status === 'settled' ? `<div class="actions">
+          ${marked
+            ? `<button class="act-btn act-unmark" onclick="unmarkPayment('${escapeAttr(p.id)}', this)">Remove mark</button>`
+            : `<button class="act-btn act-mark" onclick="markPayment('${escapeAttr(p.id)}', this)">Mark as checked</button>`}
+        </div>` : ''}`;
+
+    // Collapsed summary: amount + creator email + status badge, everything
+    // else is behind a tap. onclick toggles .open on the row itself so the
+    // Mark button inside details can still be clicked without collapsing
+    // it (event.stopPropagation on the actions area).
+    return `
+      <div class="pay-row ${marked ? 'marked' : ''}" onclick="togglePayRow(this, event)">
+        <div class="pay-summary">
+          <div style="min-width:0;">
+            <div class="pay-amt">$${amt}</div>
+            <div class="pay-sub">${safeText(p.creator_email)}</div>
+          </div>
+          <div class="pay-summary-right">${statusBadge}<div class="pay-caret">\u203a</div></div>
+        </div>
+        <div class="pay-details">${detailsInner}</div>
+      </div>`;
+  }).join('');
+}
+
+function showModTab(which){
+  const panels = { payments: el('tabPayments'), creators: el('tabCreators'), daily: el('tabDaily') };
+  const btns   = { payments: el('tabPaymentsBtn'), creators: el('tabCreatorsBtn'), daily: el('tabDailyBtn') };
+  for (const key in panels){
+    panels[key].style.display = key === which ? 'block' : 'none';
+    btns[key].classList.toggle('active', key === which);
+  }
+  // Load lazily — only the tab actually opened fetches anything.
+  if (which === 'creators') loadCreators();
+  if (which === 'daily') loadDaily();
+}
+
+// Tap the summary to expand/collapse. Ignores taps that started inside
+// a button or the copy-mini chip — otherwise the Mark button would also
+// collapse the details it lives in.
+function togglePayRow(row, ev){
+  if (ev.target.closest('button')) return;
+  row.classList.toggle('open');
+}
+
+async function markPayment(id, btn){
+  const note = prompt('Add a note for the creator (optional):') ?? '';
+  btn.disabled = true;
+  try {
+    const { error } = await window.supabaseClient
+      .rpc('mark_payment', { p_payment_id: id, p_note: note.trim() || null });
+    if (error) return showToast('Failed: ' + error.message, 'err');
+    showToast('Marked as checked', 'ok');
+    loadPayments();
+  } catch (e) {
+    console.error('markPayment failed:', e);
+    showToast('Could not mark it — see the browser console', 'err');
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function unmarkPayment(id, btn){
+  btn.disabled = true;
+  try {
+    const { error } = await window.supabaseClient.rpc('unmark_payment', { p_payment_id: id });
+    if (error) return showToast('Failed: ' + error.message, 'err');
+    showToast('Mark removed', 'ok');
+    loadPayments();
+  } catch (e) {
+    console.error('unmarkPayment failed:', e);
+    showToast('Could not remove the mark — see the browser console', 'err');
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+el('loginBtn').addEventListener('click', doLogin);
+el('loginPassword').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
+el('logoutBtn').addEventListener('click', async () => {
+  await window.supabaseClient.auth.signOut();
+  window.location.reload();
+});
+el('searchBtn').addEventListener('click', () => loadPayments(true));
+el('searchInput').addEventListener('keydown', e => { if (e.key === 'Enter') loadPayments(true); });
+el('statusFilter')?.addEventListener('change', () => loadPayments(true));
+el('timeFilter')?.addEventListener('change', () => loadPayments(true));
+el('loadMoreBtn')?.addEventListener('click', () => loadPayments(false));
+
+// Resume an existing session rather than asking for the password again.
+(async () => {
+  const { data: { session } } = await window.supabaseClient.auth.getSession();
+  if (!session) return;
+  const { data: profile } = await window.supabaseClient
+    .from('profiles').select('role, display_name, email').eq('id', session.user.id).single();
+  if (profile?.role === 'moderator' || profile?.role === 'admin'){
+    currentUser = { ...session.user, ...profile };
+    enterApp();
+  }
+})();
+    </script>
+  </body>
+</html>

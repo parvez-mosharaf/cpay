@@ -1,0 +1,601 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="theme-color" content="#00D632">
+    <title>Boltpay — Pay</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+    <!-- These three are this page's contract with the rest of the system.
+         Drop any one and the page fails silently:
+           supabase-js — the client used for get_link_preview
+           config.js   — defines window.SUPABASE_URL and window.supabaseClient
+           theme.js    — defines applyDomainTheme(), awaited on load -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="config.js"></script>
+    <script src="theme.js"></script>
+
+    <style>
+/* ====== RESET & BASE ====== */
+* { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+
+html { background: #00D632; }
+body {
+  margin: 0; min-height: 100dvh; display: flex; flex-direction: column;
+  background: #00D632; font-family: 'DM Sans', sans-serif;
+  overscroll-behavior: none; color: #000;
+}
+
+/* ====== DESKTOP FIX (PREMIUM FEEL) ====== */
+@media (min-width: 600px) {
+  html, body { background: #0a0a0a !important; align-items: center; justify-content: center; }
+  /* Loading and not-found share this shell too, so the page does not jump
+     from a full-bleed layout into a phone frame once the link resolves. */
+  .phone-shell {
+    width: 100%; max-width: 400px; height: 90vh; max-height: 850px; min-height: 750px;
+    background: #00D632 !important; border-radius: 36px;
+    box-shadow: 0 24px 80px rgba(0,0,0,0.6), 0 0 0 10px #111, 0 0 0 14px #222;
+    overflow: hidden; position: relative;
+  }
+}
+.phone-shell {
+  flex: 1; width: 100%; display: flex; flex-direction: column;
+  background: #00D632; margin: 0 auto;
+}
+
+/* ====== TOP BAR ====== */
+.topbar { display:flex; align-items:center; justify-content:space-between; padding:16px 24px 0; }
+.topbar-name { font-size:18px; font-weight:700; color:#000; letter-spacing:-0.3px; text-transform: capitalize; }
+.topbar-avatar {
+  width:36px; height:36px; background:rgba(0,0,0,0.12); border-radius:50%;
+  display:flex; align-items:center; justify-content:center;
+  font-size:15px; font-weight:800; color:#000; text-transform: uppercase;
+}
+
+/* ====== AMOUNT DISPLAY ====== */
+.amount-display { flex:1; display:flex; align-items:center; justify-content:center; padding:10px 20px; min-height: 140px; }
+.amount-text {
+  font-size:80px; font-weight:700; color:#000; letter-spacing:-2px;
+  line-height:1; word-break:break-all; text-align:center;
+}
+/* "$5000.00" at 80px overflows a 360px screen and shoves the keypad off. */
+.amount-text.long { font-size:56px; }
+
+/* ====== KEYPAD ====== */
+.keypad-section { padding:0 30px 15px; }
+.keypad { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; max-width:320px; margin:0 auto; }
+.key {
+  background:transparent; border:none; border-radius: 16px;
+  font-size:32px; font-weight:500; color:#000; padding:16px 0;
+  cursor:pointer; font-family:'DM Sans',sans-serif; transition: all 0.15s ease;
+}
+.key:active { background:rgba(0,0,0,0.08); transform:scale(0.95); }
+.key-backspace { font-size:26px; font-weight:600; display:flex; align-items:center; justify-content:center; }
+
+/* ====== QUICK AMOUNTS & PAY ACTION ====== */
+.action-section { padding:0 20px 20px; display:flex; flex-direction:column; gap:12px; }
+
+.quick-amounts { display:none; flex-wrap:wrap; gap:8px; justify-content:center; padding-bottom:10px; }
+.quick-amounts.visible { display:flex; animation: fadeInDown 0.3s ease; }
+.quick-chip {
+  background:rgba(0,0,0,0.1); border:none; border-radius:999px;
+  padding:12px 20px; font-size:16px; font-weight:600; color:#000; cursor:pointer;
+  transition: all 0.2s;
+}
+.quick-chip:active { transform: scale(0.95); }
+.quick-chip.selected { background:#000; color:#00D632; }
+
+.quick-btn {
+  width:100%; background:rgba(0,0,0,0.08); border:none; border-radius:18px;
+  padding:16px; font-size:16px; font-weight:700; color:#000; cursor:pointer;
+  transition: all 0.2s;
+}
+.quick-btn:active { background:rgba(0,0,0,0.15); transform:scale(0.98); }
+
+.pay-btn {
+  width:100%; background:#000; color:#fff; border:none; border-radius:18px;
+  padding:18px; font-size:18px; font-weight:700; cursor:pointer;
+  display: flex; align-items: center; justify-content: center; gap: 10px;
+  transition: all 0.2s;
+}
+.pay-btn:active:not(:disabled) { transform:scale(0.98); opacity: 0.9; }
+.pay-btn:disabled { opacity:0.7; cursor:not-allowed; }
+
+/* SPINNER */
+.btn-spinner {
+  width: 22px; height: 22px; border: 3px solid rgba(255,255,255,0.3);
+  border-top-color: #fff; border-radius: 50%; animation: spin 0.8s linear infinite; display: none;
+}
+.pay-btn.loading .btn-spinner { display: block; }
+
+@keyframes spin { to { transform:rotate(360deg); } }
+@keyframes fadeInDown { from { opacity:0; transform:translateY(-10px); } to { opacity:1; transform:translateY(0); } }
+
+/* ====== STATUS MESSAGE ====== */
+.status-msg { display:none; font-size:14px; font-weight:600; text-align:center; padding:2px 4px; line-height:1.45; }
+.status-msg.err { color:#6B0016; }
+.status-msg.loading { color:rgba(0,0,0,0.6); }
+
+/* ====== BOTTOM NAV ====== */
+.bottom-nav {
+  display:flex; align-items:center; justify-content:space-between;
+  padding:15px 24px 20px; flex-shrink: 0; margin-top: auto;
+}
+.bnav-left { width: 40px; display:flex; justify-content:flex-start; align-items:center; }
+.bnav-amount { font-size:14px; font-weight:700; color:#000; }
+
+.bnav-center {
+  width:44px; height:44px; background:#00D632; border-radius:50%;
+  display:flex; align-items:center; justify-content:center;
+  font-size:22px; font-weight:800; color:#fff;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15); border: 2px solid rgba(255,255,255,0.2);
+}
+
+.bnav-right { width: 40px; display:flex; justify-content:flex-end; }
+.bnav-clock {
+  width:24px; height:24px; border:2px solid #000; border-radius:50%; position:relative;
+}
+.bnav-clock::after { content:''; position:absolute; width:2px; height:6px; background:#000; top:4px; left:50%; transform:translateX(-50%); border-radius:1px; }
+.bnav-clock::before { content:''; position:absolute; width:5px; height:2px; background:#000; top:50%; left:50%; transform:translateY(-50%); border-radius:1px; }
+
+/* ====== MERCHANT CARD (all layouts) ====== */
+.merchant-card{ margin:10px 20px 0; background:rgba(0,0,0,0.07); border-radius:22px;
+  padding:14px 16px 16px; text-align:center; }
+.secure-pill{ display:inline-block; background:#000; color:#00D632; border-radius:999px;
+  padding:5px 14px; font-size:11px; font-weight:800; letter-spacing:.04em; margin-bottom:12px; }
+.merchant-avatar{ width:56px; height:56px; margin:0 auto 8px; border-radius:16px; background:#000;
+  color:#00D632; display:flex; align-items:center; justify-content:center;
+  font-size:30px; font-weight:800; text-transform:uppercase; }
+.merchant-name{ font-size:21px; font-weight:800; letter-spacing:-0.5px; text-transform:capitalize; }
+.merchant-sub{ font-size:12px; font-weight:600; color:rgba(0,0,0,0.55); margin-top:2px; }
+
+/* ====== LAYOUT SWITCHING ======
+   One page, three arrangements. theme.js resolves the domain to a layout
+   name and sets data-layout on <html>; these rules show the matching
+   pieces. The palette is identical in all three — the brand colour never
+   changes, only the arrangement does. */
+.classic-body{ display:none; padding:0 20px; flex:1; }
+html[data-layout="classic"] .amount-display,
+html[data-layout="classic"] .keypad-section,
+html[data-layout="classic"] .quick-amounts,
+html[data-layout="classic"] #quickToggle{ display:none !important; }
+html[data-layout="classic"] .classic-body{ display:block; }
+/* .classic-body is appended after .action-section in the DOM, so without
+   an explicit order the Pay button rendered above the amount field. The
+   shell is a flex column, so ordering here costs nothing and keeps the
+   markup in one place. */
+html[data-layout="classic"] .topbar{ order:1; }
+html[data-layout="classic"] .merchant-card{ order:2; }
+html[data-layout="classic"] .classic-body{ order:3; }
+html[data-layout="classic"] .action-section{ order:4; }
+html[data-layout="classic"] .bottom-nav{ order:5; }
+
+html[data-layout="tile"] .merchant-card{ background:rgba(0,0,0,0.10); }
+html[data-layout="tile"] .amount-text{ font-size:64px; }
+html[data-layout="tile"] .key{ background:rgba(255,255,255,0.16); border-radius:14px; color:#fff; }
+html[data-layout="tile"] .key:active{ background:rgba(255,255,255,0.28); }
+html[data-layout="tile"] .keypad{ gap:12px; }
+html[data-layout="tile"] .topbar-name,
+html[data-layout="tile"] .merchant-name,
+html[data-layout="tile"] .amount-text{ color:#fff; }
+html[data-layout="tile"] .merchant-sub{ color:rgba(255,255,255,0.75); }
+html[data-layout="tile"] .merchant-avatar{ background:rgba(255,255,255,0.18); color:#fff; }
+html[data-layout="tile"] .secure-pill{ background:rgba(0,0,0,0.35); color:#fff; }
+html[data-layout="tile"] .pay-btn{ background:rgba(0,0,0,0.28); color:#fff; }
+html[data-layout="tile"] .quick-btn{ background:rgba(255,255,255,0.16); color:#fff; }
+html[data-layout="tile"] .bnav-amount{ color:#fff; }
+
+/* ====== CLASSIC PIECES ====== */
+.classic-inputwrap{ display:flex; align-items:center; gap:10px; background:#fff; border-radius:999px;
+  padding:16px 22px; margin-bottom:16px; }
+.classic-dollar{ font-size:22px; font-weight:800; color:#00A82A; }
+.classic-inputwrap input{ flex:1; border:none; outline:none; background:transparent;
+  font-family:'DM Sans',sans-serif; font-size:20px; font-weight:600; color:#000; min-width:0; }
+.classic-label{ font-size:12px; font-weight:800; color:#0A3D14; letter-spacing:.06em; margin-bottom:9px; }
+.classic-chips{ display:flex; gap:9px; margin-bottom:9px; }
+.classic-chip{ flex:1; background:#fff; border:none; border-radius:999px; padding:14px 6px;
+  font-family:'DM Sans',sans-serif; font-size:15px; font-weight:700; color:#000; cursor:pointer; }
+.classic-chip:active{ transform:scale(.96); }
+.classic-chip.selected{ background:#000; color:#00D632; }
+.classic-toggle{ width:100%; background:transparent; border:2px solid rgba(0,0,0,0.25);
+  border-radius:999px; padding:13px; font-family:'DM Sans',sans-serif; font-size:15px;
+  font-weight:700; color:#0A3D14; cursor:pointer; }
+
+/* ====== LOADING / NOT FOUND ====== */
+.state-panel { align-items:center; justify-content:center; text-align:center; padding:40px 28px; gap:14px; }
+.state-dot {
+  width:44px; height:44px; border:4px solid rgba(0,0,0,0.15); border-top-color:#000;
+  border-radius:50%; animation:spin 0.9s linear infinite; margin-bottom:6px;
+}
+.state-mark { font-size:64px; font-weight:800; line-height:1; letter-spacing:-2px; }
+.state-title { font-size:26px; font-weight:800; letter-spacing:-0.5px; }
+.state-sub { font-size:15px; font-weight:500; color:rgba(0,0,0,0.62); line-height:1.55; max-width:300px; }
+    </style>
+  </head>
+  <body>
+
+    <!-- LOADING -->
+    <div class="phone-shell state-panel" id="loadingState">
+      <div class="state-dot"></div>
+      <div class="state-sub">Loading payment page…</div>
+    </div>
+
+    <!-- NOT FOUND -->
+    <div class="phone-shell state-panel" id="notFoundCard" style="display:none;">
+      <div class="state-mark">404</div>
+      <div class="state-title">Page not found</div>
+      <div class="state-sub">This payment link doesn't exist, or its owner has turned it off.</div>
+    </div>
+
+    <!-- PAYMENT PAGE -->
+    <div class="phone-shell" id="paymentCard" style="display:none;">
+
+      <div class="topbar">
+        <div class="topbar-name" id="creatorName">Processing...</div>
+        <div class="topbar-avatar" id="creatorAvatar">$</div>
+      </div>
+
+      <!-- Who is being paid, stated plainly before any amount is typed.
+           The payer arrived from a shared link and may have no idea who
+           is on the other end; a name and an initial is the least that
+           makes a payment page feel like it belongs to someone. -->
+      <div class="merchant-card">
+        <div class="secure-pill">&#10004; Secure Payment</div>
+        <div class="merchant-avatar" id="merchantAvatar">$</div>
+        <div class="merchant-name" id="merchantName">&nbsp;</div>
+        <div class="merchant-sub">Instant &middot; Lightning</div>
+      </div>
+
+      <div class="amount-display">
+        <div class="amount-text" id="amountDisplay">$0</div>
+      </div>
+
+      <div class="keypad-section">
+        <div class="keypad" id="keypad">
+          <button class="key" data-key="1">1</button>
+          <button class="key" data-key="2">2</button>
+          <button class="key" data-key="3">3</button>
+          <button class="key" data-key="4">4</button>
+          <button class="key" data-key="5">5</button>
+          <button class="key" data-key="6">6</button>
+          <button class="key" data-key="7">7</button>
+          <button class="key" data-key="8">8</button>
+          <button class="key" data-key="9">9</button>
+          <button class="key" data-key=".">.</button>
+          <button class="key" data-key="0">0</button>
+          <button class="key key-backspace" data-key="back" aria-label="Backspace">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 4H8l-7 8 7 8h13a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2z"></path>
+              <line x1="18" y1="9" x2="12" y2="15"></line>
+              <line x1="12" y1="9" x2="18" y2="15"></line>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <div class="action-section">
+        <div class="quick-amounts" id="quickAmounts">
+          <button class="quick-chip" data-amount="10">$10</button>
+          <button class="quick-chip" data-amount="25">$25</button>
+          <button class="quick-chip" data-amount="50">$50</button>
+          <button class="quick-chip" data-amount="100">$100</button>
+          <button class="quick-chip" data-amount="200">$200</button>
+        </div>
+        <button class="quick-btn" id="quickToggle">Quick amount</button>
+
+        <div class="status-msg" id="statusMsg"></div>
+
+        <button class="pay-btn" id="payBtn">
+          <div class="btn-spinner"></div>
+          <span id="payBtnText">Pay</span>
+        </button>
+      </div>
+
+      <!-- CLASSIC layout: an amount field and quick-select chips instead
+           of the keypad. Same colours, same handlers, same ids reused
+           where they are shared. -->
+      <div class="classic-body" id="classicBody">
+        <div class="classic-inputwrap">
+          <span class="classic-dollar">$</span>
+          <input type="text" inputmode="decimal" id="classicInput" placeholder="Enter amount" autocomplete="off">
+        </div>
+        <div class="classic-label">$ QUICK SELECT</div>
+        <div class="classic-chips" id="classicChips">
+          <button class="classic-chip" data-amount="10">$10.00</button>
+          <button class="classic-chip" data-amount="20">$20.00</button>
+          <button class="classic-chip" data-amount="50">$50.00</button>
+        </div>
+        <div class="classic-chips classic-more" id="classicMore" style="display:none;">
+          <button class="classic-chip" data-amount="100">$100.00</button>
+          <button class="classic-chip" data-amount="200">$200.00</button>
+          <button class="classic-chip" data-amount="500">$500.00</button>
+        </div>
+        <button class="classic-toggle" id="classicToggle">Show more amounts &#9662;</button>
+      </div>
+
+      <div class="bottom-nav">
+        <div class="bnav-left">
+          <span class="bnav-amount" id="navAmount">$0</span>
+        </div>
+        <div class="bnav-center">$</div>
+        <div class="bnav-right">
+          <div class="bnav-clock"></div>
+        </div>
+      </div>
+
+    </div>
+
+    <script>
+// Kept in sync with validate_link_slug() in the database and the RESERVED
+// set in worker/og-preview-worker.js. Matched case-insensitively, because
+// /Admin has to be refused as firmly as /admin.
+const RESERVED = ['index','login','register','dashboard','admin','404','config','theme',
+  'assets','favicon','invoice-boltpay-v2','api','u','static','public',
+  'well-known','robots','sitemap','moderator'];
+
+// NOT lowercased. /taylor-james, /TaylorJames and /taylorjames are three
+// separate links pointing at three BTCPay stores with three different
+// rates, so the slug has to reach the server exactly as it was typed.
+const slug = window.location.pathname.replace(/^\/|\/$/g, '');
+
+const MIN_AMOUNT = 1;
+const MAX_AMOUNT = 5000;
+
+// Held as a string, not a number, so a trailing "." or "50." survives
+// while the customer is still typing.
+let amountStr = '';
+
+function el(id){ return document.getElementById(id); }
+
+function showNotFound(){
+  el('loadingState').style.display = 'none';
+  el('paymentCard').style.display = 'none';
+  el('notFoundCard').style.display = 'flex';
+}
+
+function showPaymentCard(){
+  el('loadingState').style.display = 'none';
+  el('notFoundCard').style.display = 'none';
+  el('paymentCard').style.display = 'flex';
+}
+
+function currentAmount(){
+  const n = parseFloat(amountStr);
+  return Number.isFinite(n) ? n : 0;
+}
+
+function renderAmount(){
+  const shown = '$' + (amountStr === '' ? '0' : amountStr);
+  const display = el('amountDisplay');
+  display.textContent = shown;
+  display.classList.toggle('long', shown.length > 8);
+  el('navAmount').textContent = shown;
+
+  // The classic layout types into a field instead of the keypad, but both
+  // read and write the same amountStr — so switching layout never changes
+  // what gets sent, only how it is entered.
+  const ci = el('classicInput');
+  if (ci && document.activeElement !== ci) ci.value = amountStr;
+  document.querySelectorAll('.classic-chip').forEach(c => {
+    c.classList.toggle('selected', amountStr !== '' && parseFloat(c.dataset.amount) === currentAmount());
+  });
+
+  const amt = currentAmount();
+  document.querySelectorAll('.quick-chip').forEach(c => {
+    c.classList.toggle('selected', amountStr !== '' && parseFloat(c.dataset.amount) === amt);
+  });
+}
+
+function pressKey(k){
+  clearStatus();
+
+  if (k === 'back'){
+    amountStr = amountStr.slice(0, -1);
+    renderAmount();
+    return;
+  }
+
+  if (k === '.'){
+    if (amountStr.includes('.')) return;
+    amountStr = (amountStr === '' ? '0' : amountStr) + '.';
+    renderAmount();
+    return;
+  }
+
+  // Every rule the server enforces is applied here as well, so the display
+  // can never show an amount create-invoice would turn around and reject.
+  const parts = amountStr.split('.');
+  if (parts.length === 2 && parts[1].length >= 2) return;  // cents only
+  if (amountStr === '0') amountStr = '';                    // no leading zero
+
+  const next = amountStr + k;
+  if (parseFloat(next) > MAX_AMOUNT) return;
+  if (next.replace('.', '').length > 8) return;
+
+  amountStr = next;
+  renderAmount();
+}
+
+function setStatus(text, kind){
+  const s = el('statusMsg');
+  s.textContent = text;
+  s.className = 'status-msg ' + (kind || '');
+  s.style.display = 'block';
+}
+
+function clearStatus(){
+  const s = el('statusMsg');
+  s.style.display = 'none';
+  s.textContent = '';
+}
+
+function setPaying(isPaying, label){
+  const btn = el('payBtn');
+  btn.disabled = isPaying;
+  btn.classList.toggle('loading', isPaying);
+  el('payBtnText').textContent = label;
+}
+
+window.addEventListener('DOMContentLoaded', async () => {
+  // This page paints in fixed brand colours, so applyDomainTheme() changes
+  // nothing visible here. The call stays because theme.js is also how every
+  // page resolves which domain the visitor arrived on; skipping it would be
+  // a silent divergence from the rest of the site.
+  await applyDomainTheme();
+
+  if (!slug || RESERVED.includes(slug.toLowerCase()) || slug.includes('.') || slug.includes('/')){
+    showNotFound();
+    return;
+  }
+
+  try {
+    const { data, error } = await window.supabaseClient.rpc('get_link_preview', { p_slug: slug });
+    const row = Array.isArray(data) ? data[0] : data;
+    if (error || !row || row.is_active === false){
+      showNotFound();
+      return;
+    }
+
+    const name = row.display_name || slug;
+    // textContent, never innerHTML: display_name is free text a creator
+    // chose, and this page is served to the public.
+    el('creatorName').textContent = name;
+    el('creatorAvatar').textContent = ([...name][0] || '$');
+    el('merchantName').textContent = name;
+    el('merchantAvatar').textContent = ([...name][0] || '$');
+    document.title = 'Pay ' + name + ' — Boltpay';
+
+    showPaymentCard();
+    renderAmount();
+  } catch (e){
+    console.error('link lookup failed:', e);
+    showNotFound();
+    return;
+  }
+
+  el('keypad').addEventListener('click', (e) => {
+    const btn = e.target.closest('.key');
+    if (btn) pressKey(btn.dataset.key);
+  });
+
+  el('quickToggle').addEventListener('click', () => {
+    el('quickAmounts').classList.toggle('visible');
+  });
+
+  el('quickAmounts').addEventListener('click', (e) => {
+    const chip = e.target.closest('.quick-chip');
+    if (!chip) return;
+    amountStr = chip.dataset.amount;
+    clearStatus();
+    renderAmount();
+  });
+
+  el('payBtn').addEventListener('click', startPayment);
+
+  // Classic layout inputs. Present in every layout's DOM but only visible
+  // in one, so wiring them unconditionally is safe.
+  el('classicInput').addEventListener('input', (e) => {
+    // Same rules as the keypad, applied to typed text: digits, one dot,
+    // two decimals, capped at MAX_AMOUNT.
+    let v = e.target.value.replace(/[^0-9.]/g, '');
+    const parts = v.split('.');
+    if (parts.length > 2) v = parts[0] + '.' + parts.slice(1).join('');
+    if (parts[1] !== undefined) v = parts[0] + '.' + parts[1].slice(0, 2);
+    if (v !== '' && parseFloat(v) > MAX_AMOUNT) v = amountStr;
+    amountStr = v;
+    e.target.value = v;
+    clearStatus();
+    renderAmount();
+  });
+
+  el('classicChips').addEventListener('click', pickChip);
+  el('classicMore').addEventListener('click', pickChip);
+  el('classicToggle').addEventListener('click', () => {
+    const more = el('classicMore');
+    const open = more.style.display !== 'none';
+    more.style.display = open ? 'none' : 'flex';
+    el('classicToggle').innerHTML = open ? 'Show more amounts &#9662;' : 'Show fewer amounts &#9652;';
+  });
+
+  // Physical keyboards, for anyone paying from a desktop.
+  document.addEventListener('keydown', (e) => {
+    if (el('paymentCard').style.display === 'none') return;
+    if (e.key >= '0' && e.key <= '9') pressKey(e.key);
+    else if (e.key === '.') pressKey('.');
+    else if (e.key === 'Backspace') pressKey('back');
+    else if (e.key === 'Enter') startPayment();
+  });
+});
+
+function pickChip(e){
+  const chip = e.target.closest('.classic-chip');
+  if (!chip) return;
+  amountStr = chip.dataset.amount;
+  clearStatus();
+  renderAmount();
+}
+
+async function startPayment(){
+  const amount = currentAmount();
+  clearStatus();
+
+  if (!amount || amount < MIN_AMOUNT || amount > MAX_AMOUNT){
+    setStatus('Enter an amount between $' + MIN_AMOUNT + ' and $' + MAX_AMOUNT.toLocaleString() + '.', 'err');
+    return;
+  }
+
+  setPaying(true, 'Creating invoice…');
+  setStatus('Setting up your Lightning invoice — this takes a few seconds.', 'loading');
+
+  try {
+    // Same-origin first, so the Cloudflare Worker can attach the city and
+    // country it already resolved — a direct call to supabase.co carries
+    // no geo at all, which is why every payment showed "Unknown location".
+    // Falls straight back to Supabase if the worker is not attached to
+    // this domain: a missing location must never block a payment.
+    const body = JSON.stringify({ slug, amount });
+    let res;
+    try {
+      res = await fetch('/api/create-invoice', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body,
+      });
+      if (res.status === 404 || res.status === 405) throw new Error('proxy unavailable');
+    } catch {
+      res = await fetch(`${window.SUPABASE_URL}/functions/v1/create-invoice`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body,
+      });
+    }
+    const result = await res.json();
+
+    if (!res.ok){
+      setStatus(result.error || 'Something went wrong. Please try again.', 'err');
+      setPaying(false, 'Pay');
+      return;
+    }
+
+    // sessionStorage is only a cache so the invoice page can paint the QR
+    // before its own round trip finishes. The id in the URL is what really
+    // identifies the invoice, so the link survives a refresh, a closed tab,
+    // or being opened on another device.
+    sessionStorage.setItem('invoiceSession', JSON.stringify({
+      paymentId: result.paymentId,
+      payCode: result.payCode,
+      payUrl: result.payUrl,
+      returnUrl: window.location.pathname,
+    }));
+    window.location.href = '/invoice-boltpay-v2.html?id=' + encodeURIComponent(result.paymentId);
+  } catch (e){
+    console.error('create-invoice failed:', e);
+    setStatus('Network error — please check your connection and try again.', 'err');
+    setPaying(false, 'Pay');
+  }
+}
+    </script>
+  </body>
+</html>

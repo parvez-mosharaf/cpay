@@ -1,0 +1,2300 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Boltpay — Dashboard</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="config.js"></script>
+    <script src="theme.js"></script>
+    <style>
+:root{
+  /* One palette for admin, dashboard and moderator — the same near-black
+     and Cash App green as the home page and the payment card. */
+  --bg:#0B0F0C; --panel:#131916; --panel-hi:#1A221D;
+  --line:rgba(255,255,255,0.07); --line-strong:rgba(255,255,255,0.14);
+  --text:#F2F7F3; --text-dim:rgba(242,247,243,0.55); --text-faint:rgba(242,247,243,0.30);
+  --amber:#00D632; --green:#00D632; --violet:#69F28D; --ok:#00D632;
+  --alert:#FF5C7A; --warn:#F5A623;
+  --on-accent:#04240D;
+  --accent-wash:rgba(0,214,50,0.10); --accent-ring:rgba(0,214,50,0.30); --accent-deep:#04240D;
+  --green-soft:rgba(0,214,50,0.10); --violet-soft:rgba(105,242,141,0.10);
+  --alert-soft:rgba(255,92,122,0.12); --warn-soft:rgba(245,163,35,0.12);
+  --surface:#131916; --sidebar:#0B0F0C; --sidebar-hi:#1A221D;
+  --sidebar-line:rgba(255,255,255,0.06);
+  --gold:#00D632; --bronze:#69F28D;
+}
+
+/* Compact type: more rows per screen without dropping any field. */
+html{ font-size:15px; }
+*{ margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+html,body{ height:100%; }
+body{
+  font-family:'Inter','Space Grotesk',sans-serif;
+  background:var(--bg); color:var(--text);
+  min-height:100vh;
+}
+.mono{ font-family:'JetBrains Mono',monospace; }
+
+/* ===== ADMIN LAYOUT ===== */
+/* ---------- Admin-style chrome ---------- */
+.header{
+  display:flex; align-items:center; justify-content:space-between; gap:12px;
+  padding:11px 16px; position:sticky; top:0; z-index:100;
+  background:rgba(11,15,12,0.92); backdrop-filter:blur(12px);
+  border-bottom:1px solid var(--line);
+}
+.header-left{ display:flex; align-items:center; gap:11px; min-width:0; }
+.header-right{ display:flex; align-items:center; gap:10px; flex-shrink:0; }
+.bolt-mark{
+  width:36px; height:36px; border-radius:11px; flex-shrink:0;
+  background:linear-gradient(155deg,var(--amber),#00A82A);
+  display:flex; align-items:center; justify-content:center;
+}
+.header-title{ font-size:15px; font-weight:700; }
+.header-sub{ font-size:11px; color:var(--text-dim); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:44vw; }
+.topbar-status{
+  display:flex; align-items:center; gap:6px; font-size:11px; font-weight:700;
+  color:var(--ok); background:var(--accent-wash); border:1px solid var(--accent-ring);
+  padding:5px 11px; border-radius:999px; white-space:nowrap;
+}
+.btn-logout{
+  background:var(--panel); border:1px solid var(--line); color:var(--text-dim);
+  padding:8px 15px; border-radius:9px; font-size:12px; font-weight:600;
+  cursor:pointer; font-family:inherit; flex-shrink:0;
+}
+.btn-logout:hover{ background:var(--alert-soft); color:var(--alert); border-color:rgba(255,92,122,0.3); }
+
+.content{ padding:16px 14px 48px; max-width:1100px; margin:0 auto; }
+
+/* Horizontal tab row, exactly as the admin panel does it. Scrolls
+   sideways on a phone rather than wrapping into two rows. */
+.tabs{ display:flex; gap:7px; margin-bottom:14px; overflow-x:auto; padding-bottom:2px; }
+.tabs::-webkit-scrollbar{ height:3px; }
+.tabs::-webkit-scrollbar-thumb{ background:rgba(255,255,255,0.10); border-radius:3px; }
+.tab-btn{
+  flex-shrink:0; background:var(--panel); border:1px solid var(--line);
+  color:var(--text-dim); padding:8px 14px; border-radius:10px;
+  font-size:12.5px; font-weight:600; cursor:pointer; font-family:inherit;
+  display:flex; align-items:center; gap:6px; white-space:nowrap;
+}
+.tab-btn:hover{ color:var(--text); border-color:var(--line-strong); }
+.tab-btn.active{ background:var(--accent-wash); border-color:var(--accent-ring); color:var(--amber); }
+.tab-badge{
+  background:var(--alert); color:#fff; font-size:10px; font-weight:700;
+  padding:1px 6px; border-radius:999px; display:none;
+}
+.tab-badge.show{ display:inline-block; }
+
+.setup-banner{
+  display:flex; align-items:center; justify-content:space-between; gap:14px;
+  background:var(--accent-wash); border:1px solid var(--accent-ring);
+  border-radius:14px; padding:13px 15px; margin-bottom:14px; flex-wrap:wrap;
+}
+.setup-banner b{ display:block; font-size:13.5px; margin-bottom:2px; }
+.setup-banner span{ font-size:11.5px; color:var(--text-dim); }
+.pay-more-row{ display:flex; align-items:center; justify-content:space-between; gap:12px; margin-top:12px; flex-wrap:wrap; }
+.pay-count-note{ font-size:11.5px; color:var(--text-faint); font-family:'JetBrains Mono',monospace; }
+.btn-ghost{ background:var(--panel-hi); color:var(--text-dim); border:1px solid var(--line); border-radius:10px; padding:9px 18px; font-size:12.5px; font-weight:700; cursor:pointer; font-family:inherit; }
+.btn-ghost:hover{ color:var(--text); border-color:var(--line-strong); }
+.btn-ghost:disabled{ opacity:.55; cursor:not-allowed; }
+
+.section{ display:none; }
+.section.active{ display:block; }
+
+
+.topbar{
+  display:flex; align-items:center; justify-content:space-between;
+  padding:14px 24px; background:var(--surface);
+  border-bottom:1px solid var(--line);
+  position:sticky; top:0; z-index:50;
+  box-shadow:0 1px 0 rgba(15,23,32,0.04);
+}
+.topbar-left h1{ font-size:17px; font-weight:700; letter-spacing:-0.3px; }
+.topbar-left .crumb{ font-size:11px; color:var(--text-faint); margin-top:2px; }
+.topbar-right{ display:flex; align-items:center; gap:10px; }
+.topbar-status{
+  display:inline-flex; align-items:center; gap:6px;
+  padding:5px 10px; border-radius:999px;
+  background:var(--green-soft); color:var(--amber);
+  font-size:11px; font-weight:700;
+}
+.btn-logout{
+  background:var(--panel-hi); border:1px solid var(--line);
+  color:var(--text-dim);
+  padding:8px 14px; border-radius:8px; font-size:12px; font-weight:600; cursor:pointer;
+  font-family:inherit; transition:all .15s;
+}
+.btn-logout:hover{ background:var(--alert-soft); color:var(--alert); border-color:rgba(225,29,72,0.30); }
+
+/* .content and .section are defined once in the chrome block above; this
+   duplicate is left over from the old sidebar layout and its 1300px
+   max-width fought the 1100px the header uses. */
+
+/* ===== PAGE HEADER ===== */
+.page-header{ display:flex; justify-content:space-between; align-items:flex-end; margin-bottom:18px; gap:12px; flex-wrap:wrap; }
+.page-title{ font-size:20px; font-weight:800; letter-spacing:-0.5px; }
+.page-sub{ font-size:12px; color:var(--text-dim); margin-top:3px; }
+
+/* ===== STAT CARDS ===== */
+/* Two across on a phone, four on a wide screen — the same grid the admin
+   panel uses. minmax(220px) was forcing one card per row on mobile, which
+   turned six stats into six full-width blocks and a lot of scrolling. */
+.stats-grid{
+  display:grid; gap:12px;
+  grid-template-columns:repeat(2,1fr);
+  margin-bottom:18px;
+}
+@media (min-width:760px){
+  .stats-grid{ grid-template-columns:repeat(4,1fr); gap:14px; }
+}
+.insights-grid{
+  display:grid; gap:12px; grid-template-columns:repeat(1,1fr); margin-bottom:18px;
+}
+@media (min-width:640px){ .insights-grid{ grid-template-columns:repeat(3,1fr); gap:14px; } }
+.insight-card{
+  background:var(--surface); border:1px solid var(--line); border-radius:14px;
+  padding:18px; box-shadow:0 1px 2px rgba(15,23,32,0.04);
+}
+.insight-label{ font-size:11px; color:var(--text-faint); text-transform:uppercase; letter-spacing:0.8px; font-weight:700; margin-bottom:8px; }
+.insight-val{ font-size:24px; font-weight:800; letter-spacing:-0.6px; font-family:'JetBrains Mono'; color:var(--amber); }
+.insight-sub{ font-size:11.5px; color:var(--text-dim); margin-top:4px; }
+
+.stat-card{
+  background:var(--surface); border:1px solid var(--line); border-radius:14px;
+  padding:18px; position:relative; overflow:hidden;
+  box-shadow:0 1px 2px rgba(15,23,32,0.04);
+  transition:transform .15s, box-shadow .15s;
+}
+.stat-card:hover{ transform:translateY(-2px); box-shadow:0 8px 20px rgba(15,23,32,0.08); }
+.stat-head{ display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; }
+.stat-label{ font-size:11px; color:var(--text-faint); text-transform:uppercase; letter-spacing:0.8px; font-weight:700; }
+.stat-icon{
+  width:34px; height:34px; border-radius:9px;
+  display:flex; align-items:center; justify-content:center;
+  font-size:14px;
+}
+.stat-icon.green{ background:var(--green-soft); color:var(--amber); }
+.stat-icon.violet{ background:var(--violet-soft); color:var(--violet); }
+.stat-icon.alert{ background:var(--alert-soft); color:var(--alert); }
+.stat-icon.warn{ background:var(--warn-soft); color:var(--warn); }
+.stat-icon.gold{ background:rgba(212,160,23,0.12); color:var(--gold); }
+.stat-val{ font-size:24px; font-weight:800; letter-spacing:-0.6px; font-family:'JetBrains Mono'; color:var(--text); }
+.stat-val.green{ color:var(--amber); }
+.stat-val.violet{ color:var(--violet); }
+.stat-val.alert{ color:var(--alert); }
+.stat-sub{ font-size:11px; color:var(--text-faint); margin-top:6px; }
+
+/* ===== PANELS / CARDS ===== */
+.panel{
+  background:var(--surface); border:1px solid var(--line); border-radius:14px;
+  padding:18px; margin-bottom:14px;
+  box-shadow:0 1px 2px rgba(15,23,32,0.04);
+}
+.panel-head{ display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; flex-wrap:wrap; gap:8px; }
+.panel-title{ font-size:14px; font-weight:700; letter-spacing:-0.2px; }
+.panel-sub{ font-size:11px; color:var(--text-faint); }
+
+/* ===== CHARGE LEVEL TIERS ===== */
+.tier-wrap{
+  background:var(--surface); border:1px solid var(--line); border-radius:14px;
+  padding:20px; margin-bottom:14px;
+  box-shadow:0 1px 2px rgba(15,23,32,0.04);
+}
+.tier-head{ display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:14px; gap:12px; flex-wrap:wrap; }
+.tier-head .t{ font-size:15px; font-weight:700; }
+.tier-head .s{ font-size:11px; color:var(--text-faint); margin-top:3px; }
+.tier-pill{
+  font-family:'JetBrains Mono'; color:var(--amber);
+  font-size:13px; font-weight:700;
+  padding:6px 12px; background:var(--green-soft);
+  border-radius:999px;
+}
+.tier-progress{
+  height:8px; background:var(--panel-hi); border-radius:999px;
+  overflow:hidden; margin-bottom:6px; border:1px solid var(--line);
+}
+.tier-progress > div{
+  height:100%; width:0;
+  background:linear-gradient(90deg,var(--bronze),var(--gold),var(--violet),var(--amber));
+  border-radius:999px; transition:width .3s ease-out;
+}
+.tier-meta{ display:flex; justify-content:space-between; color:var(--text-faint); font-size:10px; margin-bottom:16px; font-weight:600; }
+
+.tiers-grid{
+  display:grid; gap:10px;
+  grid-template-columns:repeat(auto-fit,minmax(170px,1fr));
+}
+.tier-card{
+  background:var(--panel-hi); border:1.5px solid var(--line);
+  border-radius:11px; padding:13px 14px;
+  position:relative; transition:all .2s;
+}
+.tier-card.current{
+  background:linear-gradient(135deg,rgba(0,166,42,0.07),rgba(0,166,42,0.02));
+  border-color:var(--amber);
+  box-shadow:0 0 0 3px rgba(0,166,42,0.10);
+}
+.tier-card.current::after{
+  content:'CURRENT'; position:absolute; top:-7px; right:10px;
+  background:var(--amber); color:#fff;
+  font-size:9px; font-weight:800; padding:2px 8px;
+  border-radius:999px; letter-spacing:0.6px;
+}
+.tier-card.unlocked{ border-color:rgba(0,166,42,0.30); }
+.tier-icon{ font-size:18px; margin-bottom:6px; }
+.tier-name{ font-size:12px; font-weight:700; color:var(--text); }
+.tier-range{ font-size:10px; color:var(--text-faint); margin-top:2px; font-family:'JetBrains Mono'; }
+.tier-check{
+  position:absolute; top:10px; right:10px;
+  width:18px; height:18px; border-radius:50%;
+  background:var(--amber); color:#fff;
+  display:none; align-items:center; justify-content:center;
+  font-size:11px; font-weight:800;
+}
+.tier-card.unlocked .tier-check{ display:flex; }
+
+/* ===== METER ARC (kept for compatibility) ===== */
+.meter-card{ background:var(--surface); border:1px solid var(--line); border-radius:14px;
+  padding:18px; margin-bottom:14px; position:relative; overflow:hidden;
+  box-shadow:0 1px 2px rgba(15,23,32,0.04); }
+.charge-card-head{ display:flex; align-items:flex-start; justify-content:space-between; gap:12px; margin-bottom:8px; }
+.charge-card-title{ font-size:14px; font-weight:700; }
+.charge-card-sub{ font-size:11px; color:var(--text-faint); margin-top:2px; }
+.charge-percent{ font-family:'JetBrains Mono'; color:var(--amber); font-size:13px; font-weight:700; }
+.charge-progress{ height:6px; background:var(--panel-hi); border-radius:999px; overflow:hidden; margin-top:14px; border:1px solid var(--line); }
+.charge-progress > div{ height:100%; width:0; background:linear-gradient(90deg,var(--violet),var(--amber)); border-radius:999px; transition:width .25s ease-out; }
+.charge-progress-meta{ display:flex; justify-content:space-between; gap:12px; margin-top:6px; color:var(--text-faint); font-size:10px; }
+.meter-row{ display:flex; align-items:center; gap:22px; flex-wrap:wrap; }
+.meter-arc-wrap{ width:120px; height:70px; position:relative; flex-shrink:0; }
+.meter-label-top{ font-size:10px; letter-spacing:1.2px; text-transform:uppercase; color:var(--text-faint); font-weight:700; margin-bottom:10px; }
+.meter-figures{ flex:1; min-width:180px; }
+.meter-amount{ font-size:28px; font-weight:800; letter-spacing:-0.6px; }
+.meter-sub{ font-size:12px; color:var(--text-dim); margin-top:4px; }
+.meter-badges{ display:flex; gap:8px; margin-top:14px; flex-wrap:wrap; }
+.chip{ font-size:11px; font-weight:600; padding:6px 11px; border-radius:999px; background:var(--panel-hi); border:1px solid var(--line); color:var(--text-dim); }
+.chip b{ color:var(--text); font-family:'JetBrains Mono'; font-weight:700; }
+.meter-notice{ margin-top:16px; padding-top:14px; border-top:1px solid var(--line); display:none; }
+.meter-notice.show{ display:flex; justify-content:flex-end; }
+.meter-notice-box{ max-width:280px; text-align:right; background:var(--panel-hi); border:1px solid rgba(0,166,42,0.25); border-radius:10px; padding:10px 13px; font-size:11px; color:var(--text-dim); line-height:1.5; }
+.meter-notice-box b{ color:var(--amber); display:block; margin-bottom:3px; font-size:10px; text-transform:uppercase; letter-spacing:0.5px; }
+
+/* ===== PAYMENT LINKS ===== */
+.model-card{ background:var(--panel-hi); border:1px solid var(--line); border-radius:11px; padding:14px; margin-bottom:10px; }
+.model-head{ display:flex; justify-content:space-between; align-items:center; gap:10px; margin-bottom:10px; }
+.model-name{ font-size:13px; font-weight:700; color:var(--amber); }
+.model-slug{ font-size:10px; color:var(--text-faint); font-family:'JetBrains Mono'; margin-top:2px; }
+.domain-row{ display:flex; align-items:center; justify-content:space-between; gap:8px;
+  background:var(--surface); border:1px solid var(--line); border-radius:8px; padding:9px 11px; margin-bottom:6px; }
+.domain-url{ font-size:12px; font-family:'JetBrains Mono'; color:var(--text-dim); word-break:break-all; }
+.btn-copy{ background:var(--panel-hi); border:1px solid var(--line); color:var(--text); width:30px; height:30px;
+  border-radius:8px; cursor:pointer; flex-shrink:0; font-size:12px; }
+.limit-bar{ font-size:11px; color:var(--text-faint); margin-bottom:12px; }
+
+.modal-back{ display:none; position:fixed; inset:0; background:rgba(15,23,32,0.55); z-index:120; align-items:center; justify-content:center; padding:18px; backdrop-filter:blur(4px); }
+.modal-back.open{ display:flex; }
+.modal-card{ width:100%; max-width:420px; max-height:88vh; overflow-y:auto; background:var(--surface); border:1px solid var(--line); border-radius:16px; padding:22px; box-shadow:0 20px 50px rgba(15,23,32,0.25); }
+.modal-title{ font-size:18px; font-weight:800; margin-bottom:4px; letter-spacing:-0.3px; }
+.modal-sub{ font-size:12px; color:var(--text-dim); margin-bottom:16px; line-height:1.5; }
+.modal-field{ margin-top:16px; }
+.modal-label{ display:block; font-size:10px; letter-spacing:.09em; text-transform:uppercase; color:var(--text-faint); font-weight:700; margin-bottom:6px; }
+.modal-actions{ display:flex; gap:10px; margin-top:18px; }
+.modal-actions .btn-primary, .modal-actions .btn-ghost{ flex:1; }
+.btn-ghost{ background:var(--panel-hi); color:var(--text-dim); border:1px solid var(--line); border-radius:9px; padding:11px; font-size:13px; font-weight:700; cursor:pointer; font-family:inherit; }
+.style-opt{ display:flex; align-items:center; gap:11px; background:var(--panel-hi); border:1.5px solid var(--line); border-radius:11px; padding:12px 14px; margin-bottom:8px; cursor:pointer; transition:all .15s; }
+.style-opt:has(input:checked){ border-color:var(--amber); background:var(--green-soft); }
+.style-opt.taken{ opacity:.45; cursor:not-allowed; }
+.style-opt input{ width:18px; height:18px; accent-color:var(--amber); flex-shrink:0; }
+.style-opt-url{ font-family:'JetBrains Mono',monospace; font-size:13px; font-weight:700; color:var(--text); word-break:break-all; }
+.style-opt-name{ font-size:11px; color:var(--text-faint); margin-top:2px; }
+.cost-select{ background:var(--surface); color:var(--amber); border:1px solid var(--line); border-radius:20px; padding:3px 8px; font-size:10px; font-weight:700; font-family:inherit; flex-shrink:0; cursor:pointer; max-width:140px; }
+.rate-tag{ font-size:10px; font-weight:700; color:var(--amber); background:var(--green-soft); border-radius:20px; padding:2px 8px; white-space:nowrap; flex-shrink:0; }
+.domain-picker{ display:flex; align-items:center; gap:8px; margin-bottom:14px; flex-wrap:wrap; }
+.domain-picker label{ font-size:11px; color:var(--text-faint); font-weight:700; text-transform:uppercase; letter-spacing:.08em; }
+.domain-picker select{ background:var(--panel-hi); color:var(--text); border:1px solid var(--line); border-radius:9px; padding:8px 12px; font-size:13px; font-family:inherit; flex:1; min-width:180px; }
+.variant-note{ font-size:11px; color:var(--text-faint); margin:2px 0 8px; line-height:1.5; }
+.limit-bar b{ color:var(--amber); }
+
+.w-row{ display:flex; gap:10px; margin-bottom:10px; flex-wrap:wrap; }
+.w-input, .w-select{ background:var(--surface); border:1px solid var(--line-strong); color:var(--text);
+  padding:11px 13px; border-radius:9px; font-family:inherit; font-size:13px; outline:none; flex:1; min-width:140px; transition:border-color .15s; }
+.w-input:focus, .w-select:focus{ border-color:var(--amber); box-shadow:0 0 0 3px rgba(0,166,42,0.10); }
+.btn-primary{ background:var(--amber); color:#fff; border:none; padding:11px 18px; border-radius:9px; font-weight:700; font-size:13px; cursor:pointer; font-family:inherit; white-space:nowrap; transition:all .15s; }
+.btn-primary:hover{ background:#009524; transform:translateY(-1px); box-shadow:0 6px 14px rgba(0,166,42,0.25); }
+.btn-primary:active{ transform:scale(.97); }
+.btn-primary:disabled{ opacity:0.5; cursor:not-allowed; }
+.btn-secondary{ background:var(--panel-hi); color:var(--text-dim); border:1px solid var(--line); padding:11px 18px;
+  border-radius:9px; font-weight:700; font-size:13px; cursor:pointer; font-family:inherit; }
+.btn-secondary:hover{ background:var(--surface); color:var(--text); }
+.btn-danger{ background:var(--alert-soft); color:var(--alert); border:1px solid rgba(225,29,72,0.30);
+  padding:8px 14px; border-radius:9px; font-weight:700; font-size:12px; cursor:pointer; font-family:inherit; }
+.hint{ font-size:11px; color:var(--text-faint); margin-top:2px; }
+.saved-tag{ font-size:10px; color:var(--ok); font-weight:700; display:none; margin-top:6px; }
+.saved-tag.show{ display:block; }
+
+.btn-icon{ background:var(--panel-hi); border:1px solid var(--line); color:var(--text-dim); width:34px; height:34px;
+  border-radius:9px; cursor:pointer; display:flex; align-items:center; justify-content:center; flex-shrink:0; font-size:15px; }
+.btn-icon:hover{ background:var(--surface); color:var(--text); }
+.filter-select{ background:var(--panel-hi); border:1px solid var(--line); color:var(--text-dim);
+  padding:8px 10px; border-radius:9px; font-family:inherit; font-size:12px; outline:none; }
+.filter-select:focus{ border-color:var(--amber); }
+
+/* ===== TRANSACTIONS ===== */
+.pay-row{ background:var(--panel-hi); border:1.5px solid var(--line); border-radius:12px; padding:11px 13px; margin-bottom:8px; transition:all .15s; cursor:pointer; }
+.pay-row:hover{ border-color:rgba(255,255,255,.2); }
+/* Collapsed by default: amount + method/date + status + caret. Every
+   other field lives in .pay-details and only appears once the row is
+   tapped open — same pattern as the admin and moderator panels, so a
+   long list still fits several rows per screen. */
+.pay-summary{ display:flex; justify-content:space-between; align-items:flex-start; gap:12px; }
+.pay-summary-right{ display:flex; align-items:flex-start; gap:8px; flex-shrink:0; }
+.pay-caret{ font-size:18px; color:var(--text-faint); line-height:1; transition:transform .2s; margin-top:1px; }
+.pay-row.open .pay-caret{ transform:rotate(90deg); color:var(--ok); }
+.pay-details{ max-height:0; overflow:hidden; opacity:0; transition:max-height .25s ease, opacity .2s ease, margin-top .25s ease; margin-top:0; }
+.pay-row.open .pay-details{ max-height:900px; opacity:1; margin-top:2px; }
+.cost-chip{ display:inline-block; background:rgba(0,214,50,.14); color:var(--ok); border-radius:20px; padding:1px 7px; font-size:10px; font-weight:700; vertical-align:middle; }
+.daily-current{ background:var(--panel-hi); border:1px solid var(--line); border-radius:12px; padding:14px 16px; }
+.daily-current .dc-label{ font-size:9px; color:var(--text-faint); text-transform:uppercase; letter-spacing:1px; font-weight:700; margin-bottom:6px; }
+.daily-current .dc-total{ font-size:26px; font-weight:700; font-family:'JetBrains Mono'; color:var(--ok); }
+.daily-current .dc-sub{ font-size:11px; color:var(--text-dim); margin-top:4px; }
+.daily-row{ display:flex; align-items:center; gap:12px; background:var(--panel-hi); border:1px solid var(--line); border-radius:11px; padding:10px 13px; margin-bottom:7px; }
+.daily-date{ font-size:12px; font-weight:700; color:var(--text-dim); width:66px; flex-shrink:0; font-family:'JetBrains Mono'; }
+.daily-bar-wrap{ flex:1; background:var(--panel); border-radius:6px; overflow:hidden; height:8px; }
+.daily-bar{ height:100%; background:linear-gradient(90deg,var(--violet),var(--amber)); border-radius:6px; }
+.daily-total{ font-size:13px; font-weight:700; color:var(--ok); font-family:'JetBrains Mono'; flex-shrink:0; width:76px; text-align:right; }
+.pay-row:hover{ border-color:var(--line-strong); box-shadow:0 4px 12px rgba(15,23,32,0.06); }
+.pay-row.is-marked{ border-color:rgba(0,166,42,0.45); background:linear-gradient(135deg,rgba(0,166,42,0.06),rgba(0,166,42,0.01)); }
+.pay-top{ display:flex; justify-content:space-between; align-items:flex-start; gap:12px; }
+.pay-amt{ font-size:17px; font-weight:800; font-family:'JetBrains Mono'; line-height:1.1; color:var(--text); }
+.pay-meta{ font-size:10px; color:var(--text-faint); margin-top:4px; font-family:'JetBrains Mono'; }
+.pay-status{ display:flex; flex-direction:column; align-items:flex-end; gap:6px; }
+.pay-grid{ display:grid; grid-template-columns:repeat(auto-fit,minmax(110px,1fr)); gap:6px 14px; margin-top:9px; padding-top:9px; border-top:1px dashed var(--line); }
+.pay-field{ min-width:0; }
+.pay-field-label{ font-size:8px; letter-spacing:.08em; text-transform:uppercase; color:var(--text-faint); font-weight:700; margin-bottom:1px; }
+.pay-field-value{ font-size:11px; color:var(--text); font-family:'JetBrains Mono'; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.pay-field.wide{ grid-column:1 / -1; }
+.pay-field-value.with-copy{ display:flex; align-items:center; gap:8px; white-space:nowrap; }
+.pay-field-value.with-copy span{ overflow:hidden; text-overflow:ellipsis; }
+.pay-actions{ display:flex; gap:6px; margin-top:9px; flex-wrap:wrap; align-items:center; }
+.pay-actions .act-btn{ padding:6px 12px; font-size:11px; }
+.mark-line{ font-size:10.5px; color:var(--ok); font-weight:700; margin-top:7px; display:flex; align-items:center; gap:5px; }
+.pay-timer{ color:var(--amber); font-weight:700; font-size:13px; font-family:'JetBrains Mono'; }
+.pay-timer.urgent{ color:var(--alert); }
+.tx-row{ padding:12px 14px; border-radius:12px; background:var(--panel-hi); border:1px solid var(--line); margin-bottom:8px; }
+.tx-top{ display:flex; justify-content:space-between; align-items:flex-start; gap:8px; flex-wrap:wrap; }
+.tx-id-row{ display:flex; align-items:center; gap:6px; margin-bottom:6px; }
+.tx-id{ font-family:'JetBrains Mono'; font-size:12px; color:var(--violet); font-weight:600; }
+.tx-meta-row{ font-size:10px; color:var(--text-faint); margin-bottom:6px; font-family:'JetBrains Mono'; }
+.tx-mark{ font-size:10.5px; color:var(--ok); margin:-2px 0 6px; font-weight:700; }
+.tx-row.is-marked{ border-color:rgba(0,166,42,0.45) !important; }
+.tx-actions{ display:flex; gap:6px; margin-top:8px; flex-wrap:wrap; }
+.tx-btn{ border:none; border-radius:8px; padding:6px 12px; font-size:11px; font-weight:700; cursor:pointer; font-family:inherit; transition:all .15s; }
+.tx-btn.mark{ background:var(--amber); color:#fff; }
+.tx-btn.mark:hover{ background:#009524; }
+.tx-btn.unmark{ background:var(--alert-soft); color:var(--alert); border:1px solid rgba(225,29,72,0.30); }
+.tx-amt{ font-size:18px; font-weight:800; font-family:'JetBrains Mono'; }
+.tx-details{ display:flex; align-items:center; flex-wrap:wrap; font-size:12px; color:var(--text-dim); }
+.tx-details span{ display:flex; align-items:center; gap:5px; margin-right: 12px; margin-bottom: 4px; }
+.tx-timer{ font-family:'JetBrains Mono'; font-weight:700; color:var(--amber); font-size:13px; }
+.tx-timer.urgent{ color:var(--alert); }
+.tx-checked{ color:var(--ok); font-weight:700; font-size:11px; }
+
+/* Mark system */
+.mark-box{
+  display:inline-flex; align-items:center; gap:6px;
+  padding:5px 10px; border-radius:7px;
+  background:var(--panel-hi); border:1px solid var(--line);
+  cursor:pointer; font-size:11px; font-weight:600; color:var(--text-dim);
+  transition:all .15s; user-select:none;
+}
+.mark-box:hover{ border-color:var(--line-strong); color:var(--text); }
+.mark-box.checked{
+  background:var(--green-soft); border-color:var(--amber); color:var(--amber);
+}
+.mark-box input{ display:none; }
+.mark-box .tick{
+  width:14px; height:14px; border-radius:4px;
+  border:1.5px solid currentColor;
+  display:flex; align-items:center; justify-content:center;
+  font-size:10px; font-weight:800;
+}
+.mark-box.checked .tick{ background:var(--amber); color:#fff; border-color:var(--amber); }
+
+.mark-summary{
+  display:flex; align-items:center; gap:14px;
+  padding:10px 14px; background:var(--panel-hi);
+  border:1px dashed var(--line); border-radius:9px;
+  font-size:11px; color:var(--text-dim); margin-bottom:10px;
+}
+.mark-summary b{ color:var(--amber); font-family:'JetBrains Mono'; font-weight:700; }
+
+.bulk-bar{
+  display:flex; align-items:center; gap:8px;
+  padding:9px 12px; background:var(--violet-soft);
+  border:1px solid rgba(94,88,229,0.25); border-radius:9px;
+  margin-bottom:10px; font-size:11px;
+}
+.bulk-bar b{ color:var(--violet); font-weight:700; }
+
+/* Dashboard specific ledger styles */
+.ledger-id{ font-size:11px; color:var(--text-dim); font-family:'JetBrains Mono'; margin-top:6px; word-break:break-all; }
+.ledger-id b{ color:var(--text-faint); font-weight:700; font-family:'Inter'; }
+.copy-mini{ background:var(--panel-hi); border:1px solid var(--line); color:var(--amber); cursor:pointer; font-size:10px; font-weight:700; padding:2px 6px; border-radius:6px; margin-left:6px; font-family:inherit; }
+.copy-mini:active{ transform:scale(0.95); }
+
+.badge{ display:inline-flex; align-items:center; gap:5px; padding:3px 9px; border-radius:999px; font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.3px; }
+.badge.settled, .badge.paid, .badge.approved{ background:var(--green-soft); color:var(--amber); }
+.badge.new, .badge.pending{ background:var(--warn-soft); color:var(--warn); }
+.badge.expired, .badge.rejected, .badge.invalid{ background:var(--alert-soft); color:var(--alert); }
+.badge-dot{ width:5px; height:5px; border-radius:50%; background:currentColor; }
+.empty-state{ text-align:center; padding:34px 10px; color:var(--text-faint); font-size:13px; font-weight:500; }
+
+/* ===== MESSAGES ===== */
+.msg-bubble{ padding:11px 14px; border-radius:12px; margin-bottom:9px; font-size:13px; line-height:1.5; max-width:88%; position:relative; }
+.msg-bubble.admin{ background:var(--panel-hi); border:1px solid var(--line); }
+.msg-bubble.creator{ background:var(--green-soft); border:1px solid rgba(0,166,42,0.30); margin-left:auto; }
+.msg-from{ font-size:10px; font-weight:700; color:var(--violet); text-transform:uppercase; letter-spacing:0.4px; margin-bottom:4px; }
+.msg-time{ font-size:10px; color:var(--text-faint); margin-top:5px; }
+.msg-actions{ display:flex; gap:8px; margin-top:7px; }
+.msg-act{ background:none; border:none; color:var(--text-faint); cursor:pointer; font-size:11px; font-weight:600;
+  padding:0; font-family:inherit; }
+.msg-act:hover{ color:var(--amber); }
+.msg-act.danger:hover{ color:var(--alert); }
+.msg-edit-input{ width:100%; background:var(--panel-hi); border:1px solid var(--line); color:var(--text);
+  padding:8px 10px; border-radius:8px; font-family:inherit; font-size:13px; outline:none; margin-bottom:6px; }
+
+/* Was background:var(--text) with color:#fff — a near-white bubble with
+   white text, so "Copied" (and every other toast) was unreadable the
+   instant it appeared. Matches admin.html's toast now: a dark panel
+   background with the message coloured by outcome. */
+.toast{ position:fixed; bottom:20px; left:50%; transform:translateX(-50%); background:var(--panel-hi);
+  border:1px solid var(--line); padding:12px 20px; border-radius:10px; font-size:13px; font-weight:600; z-index:999; display:none; color:var(--text); box-shadow:0 8px 20px rgba(15,23,32,0.20); }
+.toast.ok{ border-color:rgba(0,214,50,0.4); color:var(--ok); }
+.toast.err{ border-color:rgba(255,92,122,0.4); color:var(--alert); }
+.live-dot{ display:inline-block; width:7px; height:7px; border-radius:50%; background:var(--ok); margin-right:6px; animation:pulseLive 1.4s infinite; }
+@keyframes pulseLive{ 0%,100%{ opacity:.4; } 50%{ opacity:1; } }
+.sync-pill{ display:inline-flex; align-items:center; gap:5px; margin-left:8px; padding:4px 8px; border-radius:999px; background:var(--green-soft); color:var(--amber); font-size:10px; font-weight:700; vertical-align:middle; }
+.sync-pill::before{ content:''; width:6px; height:6px; border-radius:50%; background:currentColor; animation:pulseLive 1.6s infinite; }
+.sync-pill.offline{ background:var(--panel-hi); color:var(--text-faint); }
+.sync-pill.offline::before{ animation:none; }
+
+/* ===== RESPONSIVE ===== */
+@media (max-width: 880px){
+  .content{ padding:16px; }
+  .topbar{ padding:12px 16px; }
+}
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{ animation-duration:.01ms !important; transition-duration:.01ms !important; scroll-behavior:auto !important; }
+}
+
+.mini-pay-row{ display:flex; align-items:center; justify-content:space-between; gap:10px;
+  padding:9px 2px; cursor:pointer; }
+.mini-pay-row + .mini-pay-row{ border-top:1px solid var(--line); }
+.mini-pay-row:hover{ background:var(--panel-hi); border-radius:8px; }
+.mini-pay-amt{ font-family:'JetBrains Mono',monospace; font-weight:700; font-size:14px; }
+.mini-pay-meta{ font-size:10.5px; color:var(--text-faint); margin-top:1px; }
+.mini-pay-badge{ font-size:9.5px; font-weight:700; padding:3px 8px; border-radius:999px; text-transform:uppercase; letter-spacing:.4px; }
+.mini-pay-badge.settled{ background:var(--accent-wash); color:var(--ok); }
+.mini-pay-badge.pending, .mini-pay-badge.new{ background:rgba(245,163,35,0.12); color:var(--warn); }
+.mini-pay-badge.expired, .mini-pay-badge.invalid{ background:rgba(255,92,122,0.12); color:var(--alert); }
+
+/* ---------- Compact scale ----------
+   Appended last so it overrides the sizes above without editing them.
+   Every field stays; only the scale tightens, so noticeably more fits on
+   one screen. */
+.stat-card{ padding:11px 12px !important; border-radius:12px !important; }
+.stat-label{ font-size:9px !important; margin-bottom:5px !important; }
+.stat-val{ font-size:17px !important; }
+.stat-sub{ font-size:10px !important; margin-top:4px !important; }
+.stats-grid{ gap:8px !important; margin-bottom:12px !important; }
+
+.panel{ padding:13px !important; margin-bottom:11px !important; border-radius:14px !important; }
+.panel-head{ margin-bottom:10px !important; }
+.panel-title{ font-size:13px !important; }
+.panel-sub{ font-size:10px !important; }
+
+.tab-btn, .nav-btn, .range-btn{ padding:7px 12px !important; font-size:12px !important; border-radius:9px !important; }
+.tabs, .section-nav, .range-bar{ gap:6px !important; margin-bottom:11px !important; }
+
+.wd-row, .link-row, .cust-row, .pay-row, .tx-row{
+  padding:10px 12px !important; margin-bottom:7px !important; border-radius:12px !important;
+}
+.wd-amt{ font-size:16px !important; }
+.wd-meta{ font-size:10px !important; }
+.wd-dest{ font-size:11px !important; margin-top:4px !important; }
+.wd-actions{ margin-top:8px !important; gap:5px !important; }
+.act-btn{ padding:6px 12px !important; font-size:11px !important; border-radius:8px !important; }
+
+.link-slug{ font-size:13px !important; }
+.link-owner{ font-size:10px !important; }
+.link-stats{ font-size:10px !important; margin-top:4px !important; }
+
+.cust-name{ font-size:13px !important; }
+.cust-email{ font-size:10px !important; }
+.cust-earned{ font-size:13px !important; }
+.cust-sub{ font-size:9px !important; }
+.cust-rank{ font-size:11px !important; width:22px !important; }
+
+.w-input, .filter-select{ padding:9px 11px !important; font-size:12px !important; border-radius:9px !important; }
+.btn-primary{ padding:10px 16px !important; font-size:12px !important; }
+.badge{ padding:3px 8px !important; font-size:9px !important; }
+.empty-state{ padding:20px 10px !important; font-size:12px !important; }
+.detail-stat{ padding:9px !important; }
+.detail-stat-val{ font-size:14px !important; }
+.detail-stat-label{ font-size:8px !important; }
+.detail-section-title{ font-size:11px !important; margin:12px 0 8px !important; }
+.header{ padding:11px 16px !important; }
+.content{ padding:14px 14px !important; }
+.msg-bubble{ padding:8px 11px !important; font-size:12px !important; margin-bottom:6px !important; }
+</style>
+  </head>
+  <body>
+    <div id="appShell">
+      <!-- Same chrome as the admin panel: sticky header, then a
+           horizontal tab row. The sidebar is gone — on a phone it was a
+           drawer nobody opened, and every section is one tap away here. -->
+      <div class="header">
+        <div class="header-left">
+          <div class="bolt-mark">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none">
+              <path d="M13 2L4 14h6l-1 8 9-12h-6l1-8z" fill="var(--on-accent)"/>
+            </svg>
+          </div>
+          <div>
+            <div class="header-title">Creator Studio</div>
+            <div class="header-sub" id="userEmailDisplay">Loading…</div>
+          </div>
+        </div>
+        <div class="header-right">
+          <span class="topbar-status"><span class="live-dot"></span>Live</span>
+          <button class="btn-logout" onclick="logoutUser()">Log out</button>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="tabs">
+          <button class="tab-btn active" data-sec="income"   onclick="showSection('income', this)"><span class="live-dot"></span>Transactions</button>
+          <button class="tab-btn" data-sec="overview" onclick="showSection('overview', this)">📊 Overview</button>
+          <button class="tab-btn" data-sec="links"    onclick="showSection('links', this)">🔗 Payment Links</button>
+          <button class="tab-btn" data-sec="daily"    onclick="showSection('daily', this)">📅 Daily settled</button>
+          <button class="tab-btn" data-sec="earnings" onclick="showSection('earnings', this)">🏆 Earnings</button>
+          <button class="tab-btn" data-sec="cashout"  onclick="showSection('cashout', this)">💸 Cash Out</button>
+          <button class="tab-btn" data-sec="messages" onclick="showSection('messages', this)">💬 Messages <span class="tab-badge" id="msgBadge">0</span></button>
+        </div>
+
+          <div class="section" id="sec-overview">
+            <!-- Shown only while there is nothing to pay out to.
+                 A creator can share links and take payments before ever
+                 setting this up, and the first they would learn of the
+                 gap is the moment they try to withdraw. Saying it here,
+                 once, costs nothing and saves that. -->
+            <div class="setup-banner" id="setupBanner" style="display:none;">
+              <div>
+                <b>Add a payout method</b>
+                <span>You can take payments now, but you will need this before you can withdraw.</span>
+              </div>
+              <button class="btn-ghost" onclick="showSection('cashout', document.querySelector('.tab-btn[data-sec=cashout]'))">Set up</button>
+            </div>
+            <div class="page-header">
+              <div>
+                <div class="page-title">Account overview</div>
+                <div class="page-sub">Live snapshot of your earnings, balance and account tier</div>
+              </div>
+              <div style="display:flex; align-items:center; gap:10px;">
+                <span class="sync-pill" id="creatorLiveStatus">Live sync</span>
+              </div>
+            </div>
+
+            <!-- ===== STAT CARDS ===== -->
+            <div class="stats-grid">
+              <div class="stat-card">
+                <div class="stat-head">
+                  <div class="stat-label">Available balance</div>
+                  <div class="stat-icon green">$</div>
+                </div>
+                <div class="stat-val green mono" id="statAvailable">$0.00</div>
+                <div class="stat-sub">Ready to withdraw</div>
+              </div>
+              <div class="stat-card">
+                <div class="stat-head">
+                  <div class="stat-label">Total earned</div>
+                  <div class="stat-icon gold">★</div>
+                </div>
+                <div class="stat-val mono" id="statEarned">$0.00</div>
+                <div class="stat-sub"><span id="statEarnedCount">0</span> settled payments</div>
+              </div>
+              <div class="stat-card">
+                <div class="stat-head">
+                  <div class="stat-label">Withdrawn</div>
+                  <div class="stat-icon violet">↑</div>
+                </div>
+                <div class="stat-val violet mono" id="statWithdrawn">$0.00</div>
+                <div class="stat-sub" id="statWdCount">0 pending requests</div>
+              </div>
+              <div class="stat-card">
+                <div class="stat-head">
+                  <div class="stat-label">Pending</div>
+                  <div class="stat-icon warn">⏱</div>
+                </div>
+                <div class="stat-val alert mono" id="statPending">0</div>
+                <div class="stat-sub">Awaiting confirmation</div>
+              </div>
+              <div class="stat-card">
+                <div class="stat-head">
+                  <div class="stat-label">Active links</div>
+                  <div class="stat-icon green">⚡</div>
+                </div>
+                <div class="stat-val mono" id="statLinks">0</div>
+                <div class="stat-sub" id="statLinkLimit">of 5 allowed</div>
+              </div>
+              <div class="stat-card">
+                <div class="stat-head">
+                  <div class="stat-label">Withdrawal fee</div>
+                  <div class="stat-icon alert">%</div>
+                </div>
+                <div class="stat-val alert mono" id="statFee">—%</div>
+                <div class="stat-sub">Set by Boltpay admin</div>
+              </div>
+            </div>
+
+            <div class="meter-notice" id="platformNoticeWrap">
+              <div class="meter-notice-box">
+                <b>📢 Notice</b>
+                <span id="noticeText"></span>
+              </div>
+            </div>
+
+            <!-- The stat cards above are a snapshot; this is what produced
+                 them. Kept intentionally light — a handful of rows with no
+                 filters or bulk actions, so Overview stays a glance rather
+                 than a second copy of the Transactions tab. "View all"
+                 hands off to the real thing. -->
+            <div class="panel" style="margin-top:4px;">
+              <div class="panel-head">
+                <div class="panel-title">Recent activity</div>
+                <button class="btn-ghost" style="padding:6px 12px; font-size:11px;"
+                        onclick="showSection('income', document.querySelector('.tab-btn[data-sec=income]'))">View all</button>
+              </div>
+              <div id="recentActivityList"><div class="empty-state">No payments yet</div></div>
+            </div>
+          </div>
+
+          <!-- ============ PAYMENT LINKS ============ -->
+          <div class="section" id="sec-links">
+            <div class="page-header">
+              <div>
+                <div class="page-title">Payment links</div>
+                <div class="page-sub">Create and manage your public payment pages</div>
+              </div>
+            </div>
+            <div class="panel">
+              <div class="panel-head">
+                <div>
+                  <div class="panel-title">Your payment links</div>
+                  <div class="domain-picker">
+                    <label for="domainPicker">Domain</label>
+                    <select id="domainPicker" onchange="renderLinks()"></select>
+                  </div>
+                  <div class="panel-sub" id="domainCountHint"></div>
+                </div>
+                <button class="btn-primary" style="padding:9px 14px; font-size:12px;" onclick="toggleLinkForm()">+ New link</button>
+              </div>
+              <div class="limit-bar" id="limitBar"></div>
+              <div id="newLinkForm" style="display:none; margin-bottom:16px;">
+                <div class="w-row">
+                  <input type="text" class="w-input" id="newSlug" placeholder="Name — e.g. Sophia or Taylor James">
+                </div>
+                <button class="btn-primary" onclick="openStylePicker()" style="width:100%;">Choose link style</button>
+                <div class="hint" id="linkFormMsg" style="display:none;"></div>
+              </div>
+              <div id="styleModal" class="modal-back">
+                <div class="modal-card">
+                  <div class="modal-title">Choose your link</div>
+                  <div class="modal-sub" id="styleModalSub"></div>
+                  <div id="styleOptions"></div>
+                  <div class="modal-field">
+                    <label class="modal-label">Cost</label>
+                    <select class="w-input" id="newShop"></select>
+                  </div>
+                  <div class="hint" id="styleModalMsg" style="display:none;"></div>
+                  <div class="modal-actions">
+                    <button class="btn-ghost" onclick="closeStylePicker()">Cancel</button>
+                    <button class="btn-primary" id="styleCreateBtn" onclick="createPaymentLink()">Create link</button>
+                  </div>
+                </div>
+              </div>
+              <div id="linksList">
+                <div class="empty-state">No payment links yet</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- ============ TRANSACTIONS ============ -->
+          <div class="section active" id="sec-income">
+            <div class="page-header">
+              <div>
+                <div class="page-title">Transactions</div>
+                <div class="page-sub">Live payment feed with local mark tracking</div>
+              </div>
+            </div>
+            <div class="panel">
+              <div class="panel-head">
+                <div class="panel-title">Transaction history <span class="sync-pill" id="creatorLiveStatus2">Live sync</span></div>
+                <button class="btn-icon" onclick="fetchPayments()" title="Refresh">⟳</button>
+              </div>
+
+              <div class="mark-summary" id="markSummary">
+                <span><b id="markCountLocal">0</b> marked locally</span>
+                <span>·</span>
+                <span><b id="markCountVerified">0</b> verified by staff</span>
+                <span>·</span>
+                <span>Total marked: <b id="markCountTotal">$0.00</b></span>
+              </div>
+
+              <div class="bulk-bar">
+                <b>Bulk mark:</b>
+                <button class="mark-box" onclick="markAllVisible()"><span class="tick">✓</span>Mark all visible</button>
+                <button class="mark-box" onclick="unmarkAllVisible()"><span class="tick">×</span>Clear marks on visible</button>
+                <button class="mark-box" onclick="exportMarks()"><span class="tick">↓</span>Export marks</button>
+              </div>
+
+              <div class="w-row">
+                <input type="text" class="w-input" id="txSearch" placeholder="Search by invoice ID or Lightning address..." oninput="renderPayments()">
+              </div>
+              <div class="w-row">
+                <select class="filter-select" id="txStatusFilter" onchange="renderPayments()">
+                  <option value="">All Status</option>
+                  <option value="new">New</option>
+                  <option value="pending">Pending</option>
+                  <option value="settled">Settled</option>
+                  <option value="expired">Expired</option>
+                  <option value="invalid">Invalid</option>
+                </select>
+                <select class="filter-select" id="txTimeFilter" onchange="renderPayments()">
+                  <option value="">All Time</option>
+                  <option value="today">Today</option>
+                  <option value="7d">7 days</option>
+                  <option value="30d">30 days</option>
+                </select>
+                <select class="filter-select" id="txMarkFilter" onchange="renderPayments()">
+                  <option value="">All marks</option>
+                  <option value="marked">Marked</option>
+                  <option value="unmarked">Unmarked</option>
+                </select>
+              </div>
+              <div id="paymentsList">
+                <div class="empty-state">No payment records found</div>
+              </div>
+              <!-- The feed is paged server-side. The count is the honest
+                   number of rows behind the filter, not a guess from the
+                   size of the last page. -->
+              <div class="pay-more-row">
+                <span class="pay-count-note" id="payCountNote"></span>
+                <div style="display:flex; gap:8px;">
+                  <button class="btn-ghost" id="payExport" onclick="exportPayments(this)">Export CSV</button>
+                  <button class="btn-ghost" id="payLoadMore" style="display:none;"
+                          onclick="loadMorePayments(this)">Load more</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- ============ DAILY SETTLED ============ -->
+          <!-- Live, not stored: computed fresh from your own payments on
+               every load, on a 5:00 PM – 5:00 PM (Asia/Dhaka) cycle
+               rather than midnight-to-midnight. Nothing here is a cron
+               job or a backup — reload the page and it recomputes. -->
+          <div class="section" id="sec-daily">
+            <div class="page-header">
+              <div>
+                <div class="page-title">Daily settled</div>
+                <div class="page-sub">5pm–5pm (Asia/Dhaka), live</div>
+              </div>
+              <button class="btn-ghost" onclick="loadDailySettled()">Refresh</button>
+            </div>
+            <div class="panel">
+              <div class="daily-current" id="dailyCurrent"><div class="empty-state">Loading…</div></div>
+            </div>
+            <div class="panel">
+              <div class="panel-head"><div class="panel-title">Previous cycles</div></div>
+              <div id="dailyList"></div>
+            </div>
+          </div>
+
+          <!-- ============ EARNINGS ============
+               Charge level and Available-vs-earned used to live inline
+               on Overview. Moved here so Overview stays a quick glance
+               and this becomes the place for anything that explains
+               HOW a creator is doing, not just what their balance is
+               right now. -->
+          <div class="section" id="sec-earnings">
+            <div class="page-header">
+              <div>
+                <div class="page-title">Earnings</div>
+                <div class="page-sub">Charge level, balance breakdown and recent performance</div>
+              </div>
+            </div>
+
+            <div class="insights-grid" id="insightsGrid">
+              <div class="insight-card">
+                <div class="insight-label">7-day revenue</div>
+                <div class="insight-val mono" id="insRevenue7d">$0.00</div>
+                <div class="insight-sub">Settled in the last 7 days</div>
+              </div>
+              <div class="insight-card">
+                <div class="insight-label">30-day revenue</div>
+                <div class="insight-val mono" id="insRevenue30d">$0.00</div>
+                <div class="insight-sub">Settled in the last 30 days</div>
+              </div>
+              <div class="insight-card">
+                <div class="insight-label">Conversion rate</div>
+                <div class="insight-val mono" id="insConversion">0%</div>
+                <div class="insight-sub" id="insConversionSub">0 of 0 invoices paid</div>
+              </div>
+            </div>
+
+            <!-- ===== CHARGE LEVEL TIERS (replaces the old calculate node) ===== -->
+            <div class="tier-wrap" id="tierWrap">
+              <div class="tier-head">
+                <div>
+                  <div class="t">Charge level</div>
+                  <div class="s">Your standing on Boltpay grows as you settle more payments</div>
+                </div>
+                <div class="tier-pill mono" id="tierCurrent">Tier 1 · Starter</div>
+              </div>
+              <div class="tier-progress"><div id="tierProgressFill"></div></div>
+              <div class="tier-meta">
+                <span id="tierProgressFrom">$0 earned</span>
+                <span id="tierProgressTo">Next: $100</span>
+              </div>
+              <div class="tiers-grid" id="tiersGrid"></div>
+            </div>
+
+            <!-- ===== ORIGINAL METER (kept for compatibility) ===== -->
+            <div class="meter-card">
+              <div class="charge-card-head">
+                <div>
+                  <div class="charge-card-title">Available vs earned</div>
+                  <div class="charge-card-sub">Available balance compared with lifetime settled earnings</div>
+                </div>
+                <div class="charge-percent" id="chargePercent">0%</div>
+              </div>
+              <div class="meter-row">
+                <div class="meter-arc-wrap">
+                  <div class="meter-label-top">Available</div>
+                  <svg viewBox="0 0 120 62" width="120" height="62">
+                    <path d="M8 58 A52 52 0 0 1 112 58" stroke="rgba(15,23,32,0.10)" stroke-width="9" fill="none" stroke-linecap="round"/>
+                    <path id="meterArc" d="M8 58 A52 52 0 0 1 112 58" stroke="url(#meterGrad)" stroke-width="9" fill="none"
+                      stroke-linecap="round" stroke-dasharray="163" stroke-dashoffset="163"/>
+                    <defs>
+                      <linearGradient id="meterGrad" x1="0" y1="0" x2="1" y2="0">
+                        <stop offset="0%" stop-color="#5E58E5"/>
+                        <stop offset="100%" stop-color="#00A82A"/>
+                      </linearGradient>
+                    </defs>
+                  </svg>
+                </div>
+                <div class="meter-figures">
+                  <div class="meter-label-top">Available balance</div>
+                  <div class="meter-amount mono" id="statAvailableUSD">$0.00</div>
+                  <div class="meter-sub">Withdraw anytime — fee applied at request time</div>
+                  <div class="meter-badges">
+                    <div class="chip">Total earned&nbsp;<b id="statEarned_b">$0.00</b></div>
+                    <div class="chip">Payments&nbsp;<b id="statEarnedCount_b">0</b></div>
+                  </div>
+                </div>
+              </div>
+              <div class="charge-progress" aria-label="Charge level progress"><div id="chargeProgressFill"></div></div>
+              <div class="charge-progress-meta"><span id="chargeAvailableMeta">$0.00 available</span><span id="chargeEarnedMeta">$0.00 earned</span></div>
+            </div>
+
+
+          </div>
+
+          <!-- ============ CASH OUT ============ -->
+          <div class="section" id="sec-cashout">
+            <div class="page-header">
+              <div>
+                <div class="page-title">Cash out</div>
+                <div class="page-sub">Manage your withdrawal wallets and request payouts</div>
+              </div>
+            </div>
+            <div class="panel">
+              <div class="panel-head">
+                <div class="panel-title">Your pricing</div>
+              </div>
+              <div class="hint" style="font-size:11.5px; color:var(--text-dim); margin-bottom:10px;">
+                Adds a percentage on top of every payment link you own, at whatever rate you choose.
+                Set 3% and someone paying a $100 link is invoiced $103.00 &mdash; you are credited
+                the full $103.00. Your customer sees only the final amount.
+                <b>This is your own pricing</b> and is not the same thing as your withdrawal fee.
+              </div>
+              <div class="w-row" style="align-items:center; gap:10px;">
+                <input type="number" class="w-input mono" id="myCostPercent" min="0" step="0.001" placeholder="0" style="max-width:130px;">
+                <span style="font-size:13px; color:var(--text-dim);">%</span>
+                <button class="btn-secondary" onclick="saveMyCost()" style="flex:1;">Save</button>
+              </div>
+              <div class="hint" id="costCeilingHint" style="font-size:11px; color:var(--text-faint); margin-top:6px;"></div>
+            </div>
+
+            <div class="panel">
+              <div class="panel-head">
+                <div class="panel-title">Your withdrawal wallets</div>
+              </div>
+              <div class="w-row" style="display:flex; flex-direction:column; gap:10px;">
+                <input type="text" class="w-input" id="wallet_lightning_address" placeholder="Lightning Address  (you@walletofsatoshi.com)">
+                <div class="hint" style="font-size:11px; color:var(--text-faint); margin:-4px 0 2px;">
+                  Set this and Lightning payouts can be sent automatically &mdash; no pasting a fresh invoice each time.
+                  A Lightning Address looks like an email and never expires.
+                  <b>Wallets that give you one:</b> Wallet of Satoshi, Blink, Alby, Phoenix, Zeus, Coinos, Primal, Bitkit.
+                  Open your wallet, find "Lightning Address" or "Receive &rarr; Address", copy it, paste it here.
+                </div>
+                <input type="text" class="w-input" id="wallet_binance_id" placeholder="Binance Pay ID">
+                <input type="text" class="w-input" id="wallet_usdt_bep20" placeholder="USDT (BEP20) Address">
+                <input type="text" class="w-input" id="wallet_bkash" placeholder="bKash Number">
+                <input type="text" class="w-input" id="wallet_nagad" placeholder="Nagad Number">
+              </div>
+              <button class="btn-secondary" onclick="saveWallets()" style="width:100%; margin-top:10px;">💾 Save Wallet Details</button>
+              <div class="saved-tag" id="walletSavedTag">✓ Saved successfully</div>
+            </div>
+
+            <div class="panel">
+              <div class="panel-head">
+                <div class="panel-title">Request a withdrawal</div>
+                <div style="text-align:right;">
+                  <div style="font-size:11px; color:var(--text-faint);">Available balance</div>
+                  <div id="statAvailableUSD2" class="mono" style="color:var(--amber); font-weight:700; font-size:18px;">$0.00</div>
+                </div>
+              </div>
+              <div class="w-row">
+                <select class="w-select" id="wdMethod" onchange="toggleInvoiceInput()">
+                  <option value="binance">Binance Pay ID</option>
+                  <option value="usdt_bep20">USDT BEP20</option>
+                  <option value="bkash">bKash</option>
+                  <option value="nagad">Nagad</option>
+                </select>
+              </div>
+              <div class="w-row">
+                <input type="number" class="w-input mono" id="wdAmount" placeholder="Amount (USD)">
+              </div>
+              <div class="w-row" id="invoiceRow" style="display:none;">
+                <input type="text" class="w-input mono" id="wdInvoice" placeholder="Paste Lightning Invoice here (Matches USD amount)">
+              </div>
+              <div id="invoiceHelpText" class="hint" style="color:var(--ok); font-weight:bold; margin-top:4px; display:none;"></div>
+              <button class="btn-primary" id="withdrawBtn" onclick="submitWithdrawal()" style="width:100%;">Submit request</button>
+              <div class="hint" style="text-align:center; margin-top:14px; color:var(--text-dim); font-size:12px;">
+                ⏱️ Withdrawals are processed within <b>30 minutes</b>.
+              </div>
+            </div>
+
+            <div class="panel">
+              <div class="panel-head">
+                <div class="panel-title">Withdrawal history</div>
+              </div>
+              <div id="withdrawalsList">
+                <div class="empty-state">No withdrawal history</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- ============ MESSAGES ============ -->
+          <div class="section" id="sec-messages">
+            <div class="page-header">
+              <div>
+                <div class="page-title">Messages</div>
+                <div class="page-sub">Thread with the Boltpay support team</div>
+              </div>
+            </div>
+            <div class="panel">
+              <div class="panel-head">
+                <div class="panel-title">Messages with Boltpay</div>
+                <div style="display:flex; gap:8px;">
+                  <button class="btn-icon" onclick="loadMessages()" title="Refresh">⟳</button>
+                  <button class="btn-danger" onclick="clearMyThread()">Clear history</button>
+                </div>
+              </div>
+              <div id="messagesList" style="max-height:420px; overflow-y:auto; margin-bottom:14px;">
+                <div class="empty-state">No messages yet</div>
+              </div>
+              <div class="w-row">
+                <input type="text" class="w-input" id="replyInput" placeholder="Send feedback or a question...">
+              </div>
+              <button class="btn-primary" onclick="sendReply()" style="width:100%;">Send</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    <div class="toast" id="toast"></div>
+
+    <script>
+document.addEventListener('click', function(e){
+  const btn = e.target.closest('[data-copy]');
+  if (!btn) return;
+  const val = btn.getAttribute('data-copy');
+  if (val){ navigator.clipboard.writeText(val); showToast('Copied', 'ok'); }
+});
+
+function escapeAttr(str){ return String(str).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function escapeHtml(str){ return String(str ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function safeMethod(m){ return escapeHtml(String(m || 'unknown').toUpperCase()); }
+
+let currentUser = null;
+let allPayments = [];
+let allWithdrawals = [];
+let allLinks = [];
+let paymentDomains = [];
+let maxLinks = 5;
+let paymentTickInterval = null;
+let creatorDataRefreshInterval = null;
+let paymentRealtimeChannel = null;
+let withdrawalRealtimeChannel = null;
+let messageRealtimeChannel = null;
+let editingMessageId = null;
+let isAutoWithdrawEnabled = false;
+let activeShops = [];
+let shopLocked = false;
+let paymentMarks = {};
+let localMarks = {};       // NEW: localStorage-backed marks for instant UI feedback
+let localMarkTotals = 0;
+// Lifetime totals, straight from the database. These must never be
+// recomputed from `allPayments` — that array is capped at 1000 rows by
+// PostgREST, so summing it understates every figure for a creator with
+// more payments than that.
+let serverAvailable = 0;
+let serverEarned = 0;
+let serverWithdrawn = 0;
+let serverSettledCount = 0;
+let serverPendingCount = 0;
+
+// Named RESERVED so ci/check_frontend.py can diff it against
+// validate_link_slug() in the database — the authoritative copy.
+const RESERVED = ['index','login','register','dashboard','admin','404','config','theme',
+  'assets','favicon','invoice-boltpay-v2','api','u','static','public',
+  'well-known','robots','sitemap','moderator'];
+const RESERVED_SLUGS = RESERVED;
+
+// ===== Tier definitions (replaces the old "calculate node") =====
+const TIERS = [
+  { name:'Starter',  icon:'🥉', min:0,     max:100 },
+  { name:'Verified', icon:'🥈', min:100,   max:500 },
+  { name:'Trusted',  icon:'🥇', min:500,   max:2000 },
+  { name:'Premium',  icon:'💎', min:2000,  max:10000 },
+  { name:'Elite',    icon:'👑', min:10000, max:Infinity },
+];
+
+function renderTiers(){
+  // Same reason as computeStats: a capped sum was placing creators in a
+  // lower tier than they had actually earned.
+  const earned = serverEarned;
+  // figure out current tier
+  let currentIdx = 0;
+  for (let i = TIERS.length - 1; i >= 0; i--){
+    if (earned >= TIERS[i].min){ currentIdx = i; break; }
+  }
+  const current = TIERS[currentIdx];
+  const next = TIERS[currentIdx + 1];
+
+  // progress fill (within current tier band)
+  let pct = 0;
+  if (current.max === Infinity){
+    pct = 1;
+  } else {
+    const bandSize = current.max - current.min;
+    pct = Math.min(1, (earned - current.min) / bandSize);
+  }
+
+  document.getElementById('tierCurrent').textContent =
+    'Tier ' + (currentIdx + 1) + ' · ' + current.name;
+  document.getElementById('tierProgressFill').style.width = (pct * 100) + '%';
+  document.getElementById('tierProgressFrom').textContent = '$' + earned.toFixed(2) + ' earned';
+  document.getElementById('tierProgressTo').textContent = next
+    ? ('Next: $' + next.min.toLocaleString())
+    : 'Top tier reached';
+
+  document.getElementById('tiersGrid').innerHTML = TIERS.map((t, i) => {
+    const unlocked = earned >= t.min;
+    const isCurrent = i === currentIdx;
+    return `<div class="tier-card ${isCurrent ? 'current' : ''} ${unlocked ? 'unlocked' : ''}">
+      <span class="tier-check">✓</span>
+      <div class="tier-icon">${t.icon}</div>
+      <div class="tier-name">Tier ${i + 1} · ${t.name}</div>
+      <div class="tier-range">$${t.min.toLocaleString()}${t.max === Infinity ? '+' : ' – $' + t.max.toLocaleString()}</div>
+    </div>`;
+  }).join('');
+}
+
+// ===== Local mark system (persists in localStorage) =====
+function loadLocalMarks(){
+  try {
+    const key = 'boltpay_local_marks_' + (currentUser?.id || 'guest');
+    localMarks = JSON.parse(localStorage.getItem(key) || '{}');
+  } catch(e){ localMarks = {}; }
+  refreshMarkTotals();
+}
+function saveLocalMarks(){
+  try {
+    const key = 'boltpay_local_marks_' + (currentUser?.id || 'guest');
+    localStorage.setItem(key, JSON.stringify(localMarks));
+  } catch(e){}
+}
+function toggleLocalMark(paymentId){
+  if (localMarks[paymentId]){
+    delete localMarks[paymentId];
+  } else {
+    localMarks[paymentId] = { at: new Date().toISOString(), note: '' };
+  }
+  saveLocalMarks();
+  refreshMarkTotals();
+  renderPayments();
+  showToast(localMarks[paymentId] ? 'Marked locally' : 'Mark removed', 'ok');
+}
+function refreshMarkTotals(){
+  const ids = Object.keys(localMarks);
+  const markedSet = new Set(ids);
+  localMarkTotals = allPayments
+    .filter(p => markedSet.has(p.id))
+    .reduce((s,p) => s + parseFloat(p.amount_settled || p.amount_requested || 0), 0);
+  const verifiedCount = allPayments.filter(p => paymentMarks[p.id]).length;
+  const elCount = document.getElementById('markCountLocal'); if (elCount) elCount.textContent = ids.length;
+  const elVer = document.getElementById('markCountVerified'); if (elVer) elVer.textContent = verifiedCount;
+  const elTot = document.getElementById('markCountTotal'); if (elTot) elTot.textContent = '$' + localMarkTotals.toFixed(2);
+}
+function markAllVisible(){
+  const search = (document.getElementById('txSearch')?.value || '').trim().toLowerCase();
+  const statusFilter = document.getElementById('txStatusFilter')?.value || '';
+  const timeFilter = document.getElementById('txTimeFilter')?.value || '';
+  let count = 0;
+  allPayments.forEach(p => {
+    if (statusFilter && p.status !== statusFilter) return;
+    if (!withinTimeFilter(p.created_at, timeFilter)) return;
+    if (search){
+      const ln = (p.lightning_invoice || '').toLowerCase(); const inv = (p.btcpay_invoice_id || '').toLowerCase();
+      if (!ln.includes(search) && !inv.includes(search)) return;
+    }
+    if (!localMarks[p.id]){ localMarks[p.id] = { at: new Date().toISOString(), note:'bulk' }; count++; }
+  });
+  saveLocalMarks(); refreshMarkTotals(); renderPayments();
+  showToast('Marked ' + count + ' payments', 'ok');
+}
+function unmarkAllVisible(){
+  const search = (document.getElementById('txSearch')?.value || '').trim().toLowerCase();
+  const statusFilter = document.getElementById('txStatusFilter')?.value || '';
+  const timeFilter = document.getElementById('txTimeFilter')?.value || '';
+  let count = 0;
+  allPayments.forEach(p => {
+    if (statusFilter && p.status !== statusFilter) return;
+    if (!withinTimeFilter(p.created_at, timeFilter)) return;
+    if (search){
+      const ln = (p.lightning_invoice || '').toLowerCase(); const inv = (p.btcpay_invoice_id || '').toLowerCase();
+      if (!ln.includes(search) && !inv.includes(search)) return;
+    }
+    if (localMarks[p.id]){ delete localMarks[p.id]; count++; }
+  });
+  saveLocalMarks(); refreshMarkTotals(); renderPayments();
+  showToast('Cleared ' + count + ' marks', 'ok');
+}
+function exportMarks(){
+  const ids = Object.keys(localMarks);
+  if (!ids.length){ showToast('No marks to export', 'err'); return; }
+  const rows = [['Payment ID','Amount','Status','Marked At']];
+  ids.forEach(id => {
+    const p = allPayments.find(x => x.id === id);
+    rows.push([id, p ? parseFloat(p.amount_settled || p.amount_requested || 0).toFixed(2) : '',
+               p ? p.status : '', localMarks[id].at || '']);
+  });
+  const csv = rows.map(r => r.map(c => '"' + String(c).replace(/"/g,'""') + '"').join(',')).join('\n');
+  const blob = new Blob([csv], { type:'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'boltpay-marks-' + new Date().toISOString().slice(0,10) + '.csv';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  showToast('Exported ' + ids.length + ' marks', 'ok');
+}
+
+async function init(){
+  await applyDomainTheme();
+  const { data: { user } } = await window.supabaseClient.auth.getUser();
+  if (!user){ window.location.href = 'login.html'; return; }
+
+  const { data: profile } = await window.supabaseClient
+    .from('profiles').select('role').eq('id', user.id).single();
+  // Resellers (role = 'moderator') own payment links and earn from them
+  // exactly as freelancers do, so this dashboard is theirs too — the
+  // moderator panel is a separate, additional tool for the creators they
+  // oversee, not a replacement for their own earnings view. Only admins
+  // and unrecognised roles are sent elsewhere.
+  if (profile?.role !== 'creator' && profile?.role !== 'moderator') {
+    const dest = profile?.role === 'admin' ? 'admin.html' : 'login.html';
+    window.location.href = dest;
+    return;
+  }
+
+  currentUser = user;
+  document.getElementById('userEmailDisplay').textContent = user.email;
+
+  loadLocalMarks();
+  await loadDomains();
+  await fetchProfile();
+  await fetchShops();
+  await Promise.allSettled([fetchLinks(), fetchPayments(), fetchWithdrawals(), refreshBalance(), fetchMarks(), loadPlatformNotice(), loadMessages()]);
+  renderTiers();
+  refreshMarkTotals();
+  if (paymentTickInterval) clearInterval(paymentTickInterval);
+  paymentTickInterval = setInterval(tickPaymentTimers, 1000);
+  if (creatorDataRefreshInterval) clearInterval(creatorDataRefreshInterval);
+  creatorDataRefreshInterval = setInterval(() => {
+    Promise.allSettled([fetchMarks(), fetchPayments(), fetchWithdrawals(), refreshBalance()]);
+  }, 15000);
+  subscribeToDashboardUpdates();
+  openInitialSection();
+}
+
+async function loadDomains(){
+  const { data } = await window.supabaseClient.from('site_domains').select('hostname, purpose, is_active, sort_order').eq('is_active', true).order('sort_order');
+  paymentDomains = (data || []).filter(d => d.purpose === 'payment' || d.purpose === 'both');
+  if (!paymentDomains.length) paymentDomains = [{ hostname: window.location.host }];
+  document.getElementById('domainCountHint').textContent = `${paymentDomains.length} domain${paymentDomains.length === 1 ? '' : 's'} available`;
+  const picker = document.getElementById('domainPicker');
+  if (picker){
+    picker.innerHTML = paymentDomains
+      .map(d => `<option value="${escapeAttr(d.hostname)}">${escapeHtml(d.hostname)}</option>`).join('');
+    const show = paymentDomains.length > 1;
+    picker.style.display = show ? '' : 'none';
+    const label = picker.previousElementSibling;
+    if (label) label.style.display = show ? '' : 'none';
+  }
+}
+
+async function fetchProfile(){
+  const { data } = await window.supabaseClient.from('profiles').select('*').eq('id', currentUser.id).single();
+  shopLocked = data?.shop_locked === true;
+  const { data: appSetting } = await window.supabaseClient.from('app_settings').select('value').eq('key', 'auto_withdraw_enabled').maybeSingle();
+
+  document.getElementById('statFee').textContent = (data?.withdrawal_fee_percent ?? 3) + '%';
+  maxLinks = data?.max_payment_links ?? 5;
+
+  // Fails CLOSED. This used to default to true, so any hiccup reading the
+  // setting — a network blip, an RLS change, a deleted row — silently
+  // offered every creator instant payouts. For a money feature the safe
+  // default is off; the server enforces the same rule independently.
+  const globalAuto = (appSetting?.value === true || String(appSetting?.value) === 'true');
+  const userAuto = (data?.auto_withdraw_enabled === true || String(data?.auto_withdraw_enabled) === 'true');
+  isAutoWithdrawEnabled = globalAuto && userAuto;
+
+  const methodDropdown = document.getElementById('wdMethod');
+  const hasLightningOption = Array.from(methodDropdown.options).some(opt => opt.value === 'lightning');
+
+  if (isAutoWithdrawEnabled && !hasLightningOption) {
+    const lnOpt = document.createElement('option');
+    lnOpt.value = 'lightning';
+    lnOpt.text = 'Lightning Network (Instant)';
+    methodDropdown.insertBefore(lnOpt, methodDropdown.firstChild);
+    methodDropdown.value = 'lightning';
+  } else if (!isAutoWithdrawEnabled && hasLightningOption) {
+    // Was remove(0) — which deletes whatever happens to sit first, not
+    // necessarily the Lightning entry. Correct only while Lightning is
+    // inserted at the front and nothing else ever is; removing it by
+    // value can't pick the wrong one.
+    const lnIndex = Array.from(methodDropdown.options).findIndex(o => o.value === 'lightning');
+    if (lnIndex >= 0) methodDropdown.remove(lnIndex);
+  }
+  toggleInvoiceInput();
+
+  // If every payout field is empty, the creator has nowhere to be paid.
+  // Surfacing that on the overview beats letting them discover it at the
+  // moment they first try to withdraw.
+  const hasPayout = ['wallet_lightning_address','wallet_binance_id','wallet_usdt_bep20','wallet_bkash','wallet_nagad']
+    .some(k => (data?.[k] || '').trim() !== '');
+  const banner = document.getElementById('setupBanner');
+  if (banner) banner.style.display = hasPayout ? 'none' : '';
+
+  ['wallet_lightning_address', 'wallet_binance_id', 'wallet_usdt_bep20', 'wallet_bkash', 'wallet_nagad'].forEach(id => {
+    if(data?.[id]) document.getElementById(id).value = data[id];
+  });
+
+  const costEl = document.getElementById('myCostPercent');
+  if (costEl) costEl.value = data?.cost_percent ?? 0;
+  // There is no admin ceiling on this any more (migration 0060), so the
+  // useful thing to show here is the user's own withdrawal fee — the
+  // other percentage in their account, and the one they do NOT control.
+  // Showing them side by side is what stops the two being confused.
+  const feeHint = document.getElementById('costCeilingHint');
+  if (feeHint) {
+    const fee = data?.withdrawal_fee_percent;
+    feeHint.textContent = (fee ?? null) === null
+      ? ''
+      : `Separately, your withdrawal fee is ${fee}% — set by the admin, taken when you cash out. It is not related to this markup.`;
+  }
+}
+
+async function saveMyCost(){
+  const raw = document.getElementById('myCostPercent').value;
+  const pct = parseFloat(raw);
+  if (raw === '' || isNaN(pct) || pct < 0) return showToast('Enter 0 or more', 'err');
+  const { data, error } = await window.supabaseClient.rpc('set_my_cost_percent', { p_percent: pct });
+  if (error) return showToast(error.message, 'err');
+  document.getElementById('myCostPercent').value = data;
+  showToast(Number(data) === 0 ? 'Pricing markup turned off' : `Links now add ${data}%`, 'ok');
+}
+
+async function saveWallets(){
+  const updates = {};
+  ['wallet_lightning_address', 'wallet_binance_id', 'wallet_usdt_bep20', 'wallet_bkash', 'wallet_nagad'].forEach(id => {
+    updates[id] = document.getElementById(id).value.trim();
+  });
+  // The column has a format CHECK, so an empty string would be rejected
+  // outright rather than read as "not set".
+  if (!updates.wallet_lightning_address) updates.wallet_lightning_address = null;
+  if (updates.wallet_lightning_address &&
+      !/^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/.test(updates.wallet_lightning_address)) {
+    return showToast('That Lightning Address does not look right — it should read like you@wallet.com', 'err');
+  }
+  const { error } = await window.supabaseClient.from('profiles').update(updates).eq('id', currentUser.id);
+  if (error) showToast('Failed: ' + error.message, 'err');
+  else {
+    const tag = document.getElementById('walletSavedTag');
+    tag.classList.add('show');
+    setTimeout(() => tag.classList.remove('show'), 2500);
+    // Clear the prompt straight away rather than on the next page load.
+    const banner = document.getElementById('setupBanner');
+    if (banner && Object.values(updates).some(v => v !== '')) banner.style.display = 'none';
+  }
+}
+
+async function loadPlatformNotice(){
+  const { data } = await window.supabaseClient.from('app_settings').select('value').eq('key', 'platform_notice').maybeSingle();
+  const notice = data?.value;
+  if (notice?.active && notice?.text){
+    document.getElementById('noticeText').textContent = notice.text;
+    document.getElementById('platformNoticeWrap').classList.add('show');
+  }
+}
+
+async function fetchShops(){
+  const { data } = await window.supabaseClient
+    .from('btcpay_shops')
+    .select('id, name, surcharge_percent, sort_order')
+    .eq('is_active', true)
+    .order('sort_order');
+  activeShops = data || [];
+  const sel = document.getElementById('newShop');
+  if (!sel) return;
+  if (shopLocked){
+    sel.innerHTML = '';
+    sel.style.display = 'none';
+    const lbl = sel.previousElementSibling;
+    if (lbl && lbl.classList.contains('modal-label')) lbl.style.display = 'none';
+    return;
+  }
+  const rate = (p) => parseFloat(p) === 0 ? 'no extra cost' : 'payer +' + parseFloat(p) + '%';
+  const options = activeShops.map(sh =>
+    `<option value="${escapeAttr(sh.id)}">${escapeHtml(sh.name)} — ${escapeHtml(rate(sh.surcharge_percent))}</option>`);
+  if (activeShops.length > 1){
+    options.unshift('<option value="">All rates — one link per rate</option>');
+  }
+  sel.innerHTML = options.join('');
+  sel.style.display = activeShops.length > 1 ? '' : 'none';
+}
+
+async function fetchLinks(){
+  // A creator's link count is capped by max_payment_links, so this cannot
+  // realistically reach the limit — but bounding it costs nothing and
+  // removes one more query that could truncate without saying so.
+  // A soft-deleted link's row survives (so old payments keep showing
+  // which link they came from), but it must never reappear here — that
+  // would look like a link the creator never removed.
+  const { data } = await window.supabaseClient.from('payment_links')
+    .select('*, btcpay_shops(name, surcharge_percent)')
+    .eq('user_id', currentUser.id).is('deleted_at', null)
+    .order('created_at').limit(500);
+  allLinks = data || [];
+  const activeCount = new Set(
+    allLinks.filter(l => l.is_active).map(l => l.variant_group || l.id)
+  ).size;
+  document.getElementById('statLinks').textContent = activeCount;
+  document.getElementById('statLinkLimit').textContent = `of ${maxLinks} allowed`;
+  document.getElementById('limitBar').innerHTML = `You've used <b>${activeCount}</b> of <b>${maxLinks}</b> active payment links.`;
+  renderLinks();
+}
+
+function rateLabel(pct){
+  return parseFloat(pct) === 0 ? 'no extra cost' : 'payer +' + parseFloat(pct) + '%';
+}
+
+async function changeLinkShop(linkId, shopId, sel){
+  sel.disabled = true;
+  try {
+    const { error } = await window.supabaseClient
+      .rpc('set_link_shop', { p_link_id: linkId, p_shop_id: shopId });
+    if (error){ showToast('Failed: ' + error.message, 'err'); await fetchLinks(); return; }
+    showToast('Cost updated for new invoices', 'ok');
+    await fetchLinks();
+  } catch (e) {
+    console.error('changeLinkShop failed:', e);
+    showToast('Could not change the cost — see the browser console', 'err');
+  } finally {
+    sel.disabled = false;
+  }
+}
+
+function renderLinks(){
+  const list = document.getElementById('linksList');
+  if (!allLinks.length){ list.innerHTML = '<div class="empty-state">No payment links yet</div>'; return; }
+
+  const host = document.getElementById('domainPicker')?.value
+    || paymentDomains[0]?.hostname
+    || window.location.host;
+
+  const groups = new Map();
+  for (const l of allLinks){
+    const key = l.variant_group || l.id;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(l);
+  }
+
+  list.innerHTML = [...groups.values()].map(variants => {
+    variants.sort((a, b) =>
+      (a.btcpay_shops?.surcharge_percent ?? 0) - (b.btcpay_shops?.surcharge_percent ?? 0));
+
+    const head = variants[0];
+    const anyActive = variants.some(v => v.is_active);
+
+    const rows = variants.map(l => {
+      const pct = l.btcpay_shops?.surcharge_percent;
+      const rateTag = (pct != null) ? `<span class="rate-tag">${escapeHtml(rateLabel(pct))}</span>` : '';
+      const url = `https://${host}/${l.slug}`;
+      const shopSelect = (shopLocked || !activeShops.length)
+        ? (rateTag || `<span class="rate-tag">${escapeHtml(rateLabel(activeShops.find(sh => sh.id === l.shop_id)?.surcharge_percent ?? 0))}</span>`)
+        : `<select class="cost-select" onchange="changeLinkShop('${escapeAttr(l.id)}', this.value, this)">
+             ${activeShops.map(sh => `<option value="${escapeAttr(sh.id)}" ${sh.id === l.shop_id ? 'selected' : ''}>${escapeHtml(rateLabel(sh.surcharge_percent))}</option>`).join('')}
+           </select>`;
+      return `<div class="domain-row">
+        <span class="domain-url">${escapeHtml(host)}/${escapeHtml(l.slug)}</span>
+        ${shopSelect}
+        <button class="btn-copy" data-copy="${escapeAttr(url)}">⧉</button>
+      </div>`;
+    }).join('');
+
+    const note = variants.length > 1
+      ? `<div class="variant-note">Same name, ${variants.length} link styles — send whichever one you prefer.</div>`
+      : '';
+
+    return `<div class="model-card">
+      <div class="model-head">
+        <div><div class="model-name">🌐 ${escapeHtml(head.display_name || head.slug)}</div></div>
+        <span class="badge ${anyActive ? 'settled' : 'expired'}"><span class="badge-dot"></span>${anyActive ? 'active' : 'disabled'}</span>
+      </div>
+      ${note}${rows}
+    </div>`;
+  }).join('');
+}
+
+function toggleLinkForm(){
+  const form = document.getElementById('newLinkForm');
+  form.style.display = form.style.display === 'none' ? 'block' : 'none';
+}
+
+function slugify(text){ return text.toLowerCase().trim().replace(/[^a-z0-9\s-]/g, '').replace(/[\s-]+/g, '-').replace(/^-+|-+$/g, ''); }
+
+let styleOptions = [];
+
+async function openStylePicker(){
+  const name = (document.getElementById('newSlug').value || '').trim();
+  const msgEl = document.getElementById('linkFormMsg');
+  msgEl.style.display = 'none';
+
+  if (name.length < 2){
+    msgEl.textContent = 'Enter a name (at least 2 characters).';
+    msgEl.style.color = 'var(--alert)'; msgEl.style.display = 'block'; return;
+  }
+
+  const { data, error } = await window.supabaseClient
+    .rpc('link_style_options', { p_name: name });
+
+  if (error){
+    msgEl.textContent = error.message; msgEl.style.color = 'var(--alert)';
+    msgEl.style.display = 'block'; return;
+  }
+
+  styleOptions = data || [];
+  if (!styleOptions.length){
+    msgEl.textContent = 'That name needs letters or numbers.';
+    msgEl.style.color = 'var(--alert)'; msgEl.style.display = 'block'; return;
+  }
+
+  const display = titleCase(name);
+  document.getElementById('styleModalSub').textContent =
+    `A single-word name gives two styles, a two-word name gives four. The name shown beside every one of them is "${display}".`;
+
+  document.getElementById('styleOptions').innerHTML = styleOptions.map((o, i) => `
+    <label class="style-opt ${o.taken ? 'taken' : ''}">
+      <input type="checkbox" value="${escapeAttr(o.style)}" ${o.taken ? 'disabled' : (i === 0 ? 'checked' : '')}>
+      <div style="min-width:0;">
+        <div class="style-opt-url">/${escapeHtml(o.slug)}</div>
+        <div class="style-opt-name">${o.taken ? 'already taken' : escapeHtml(display)}</div>
+      </div>
+    </label>`).join('');
+
+  document.getElementById('styleModalMsg').style.display = 'none';
+  document.getElementById('styleModal').classList.add('open');
+}
+
+function closeStylePicker(){
+  document.getElementById('styleModal').classList.remove('open');
+}
+
+function titleCase(n){
+  return String(n).replace(/\s+/g, ' ').trim().split(' ')
+    .map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ');
+}
+
+async function createPaymentLink(){
+  const name = (document.getElementById('newSlug').value || '').trim();
+  const msgEl = document.getElementById('styleModalMsg');
+  msgEl.style.display = 'none';
+
+  const styles = [...document.querySelectorAll('#styleOptions input:checked')].map(i => i.value);
+  if (!styles.length){
+    msgEl.textContent = 'Pick at least one link style.';
+    msgEl.style.color = 'var(--alert)'; msgEl.style.display = 'block'; return;
+  }
+
+  const shopId = document.getElementById('newShop')?.value || null;
+  const btn = document.getElementById('styleCreateBtn');
+  btn.disabled = true;
+
+  try {
+    const { data, error } = await window.supabaseClient.rpc('create_link_variants', {
+      p_display_name: name,
+      p_styles: styles,
+      p_shop_id: shopId,
+    });
+
+    if (error){
+      msgEl.textContent = error.message || 'Could not create the link.';
+      msgEl.style.color = 'var(--alert)'; msgEl.style.display = 'block'; return;
+    }
+
+    const rows = data || [];
+    const created = rows.filter(r => r.created);
+    const skipped = rows.filter(r => !r.created);
+    if (!created.length){
+      msgEl.textContent = 'Those links already exist.';
+      msgEl.style.color = 'var(--alert)'; msgEl.style.display = 'block'; return;
+    }
+
+    for (const row of created){
+      fetch(`https://${paymentDomains[0]?.hostname || window.location.host}/og-image/${encodeURIComponent(row.slug)}.png`,
+            { mode: 'no-cors', cache: 'no-store' }).catch(() => {});
+    }
+
+    closeStylePicker();
+    document.getElementById('newSlug').value = '';
+    const formMsg = document.getElementById('linkFormMsg');
+    formMsg.textContent = skipped.length
+      ? `${created.length} link${created.length === 1 ? '' : 's'} created. Already taken: ${skipped.map(r => '/' + r.slug).join(', ')}.`
+      : `${created.length} link${created.length === 1 ? '' : 's'} created.`;
+    formMsg.style.color = 'var(--ok)'; formMsg.style.display = 'block';
+
+    await fetchLinks();
+    setTimeout(() => { document.getElementById('newLinkForm').style.display = 'none'; }, 2200);
+  } catch (e) {
+    console.error('createPaymentLink failed:', e);
+    msgEl.textContent = 'Something went wrong — see the browser console.';
+    msgEl.style.color = 'var(--alert)'; msgEl.style.display = 'block';
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function markChecked(paymentId, btn){
+  const note = prompt('Add a note (optional):') ?? '';
+  btn.disabled = true;
+  try {
+    const { error } = await window.supabaseClient
+      .rpc('mark_payment', { p_payment_id: paymentId, p_note: note.trim() || null });
+    if (error) return showToast('Failed: ' + error.message, 'err');
+    showToast('Marked as checked', 'ok');
+    await fetchMarks(); renderPayments();
+  } finally { btn.disabled = false; }
+}
+
+async function unmarkPayment(paymentId, btn){
+  btn.disabled = true;
+  try {
+    const { error } = await window.supabaseClient.rpc('unmark_payment', { p_payment_id: paymentId });
+    if (error) return showToast('Failed: ' + error.message, 'err');
+    showToast('Mark removed', 'ok');
+    await fetchMarks(); renderPayments();
+  } finally { btn.disabled = false; }
+}
+
+async function fetchMarks(){
+  const { data } = await window.supabaseClient.rpc('get_my_payment_marks');
+  paymentMarks = Object.fromEntries((data || []).map(m => [m.payment_id, m]));
+  refreshMarkTotals();
+  if (allPayments.length && document.getElementById('paymentsList')) renderPayments();
+}
+
+// How many rows one "page" of the feed is, and where the next page starts.
+const PAY_PAGE = 60;
+let payOffset = 0;
+let payTotal = 0;
+
+/**
+* Load one page of payments.
+*
+* This used to be a plain .select() with no limit, which PostgREST caps at
+* 1000 rows — so a creator past that could never scroll to their older
+* payments, and nothing on screen said so. Now the server pages, and
+* total_count tells us how many there really are.
+*
+* `append` is what the Load more button passes; everything else (a filter
+* change, a realtime update) reloads from the top.
+*/
+async function fetchPayments(append = false){
+  if (!append){ payOffset = 0; }
+
+  const { data, error } = await window.supabaseClient.rpc('get_my_payments', {
+    p_limit: PAY_PAGE,
+    p_offset: payOffset,
+    p_search: null,
+    p_status: null,
+  });
+  if (error){ showToast('Failed to load payments: ' + error.message, 'err'); return; }
+
+  const rows = data || [];
+  payTotal = rows.length ? Number(rows[0].total_count || 0) : (append ? payTotal : 0);
+  allPayments = append ? allPayments.concat(rows) : rows;
+  payOffset = allPayments.length;
+
+  computeStats(); renderPayments(); renderTiers(); refreshMarkTotals();
+  updateLoadMore();
+}
+
+function updateLoadMore(){
+  const btn = document.getElementById('payLoadMore');
+  const note = document.getElementById('payCountNote');
+  if (note){
+    note.textContent = payTotal
+      ? `Showing ${allPayments.length} of ${payTotal}`
+      : '';
+  }
+  if (!btn) return;
+  // Hidden rather than disabled once everything is loaded — a permanently
+  // greyed button reads as broken.
+  btn.style.display = allPayments.length < payTotal ? '' : 'none';
+  btn.textContent = `Load ${Math.min(PAY_PAGE, payTotal - allPayments.length)} more`;
+}
+
+/**
+* Download every settled payment as CSV.
+*
+* Deliberately fetches its own pages rather than exporting what happens
+* to be on screen: an export that silently covers only the visible rows
+* is worse than none, because it looks complete. Anyone reconciling their
+* own books or filing tax needs all of it.
+*/
+async function exportPayments(btn){
+  const original = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = 'Preparing…';
+  try {
+    const PAGE = 200;
+    const rows = [];
+    for (let offset = 0; ; offset += PAGE) {
+      const { data, error } = await window.supabaseClient.rpc('get_my_payments', {
+        p_limit: PAGE, p_offset: offset, p_search: null, p_status: null,
+      });
+      if (error) { showToast('Export failed: ' + error.message, 'err'); return; }
+      const page = data || [];
+      rows.push(...page);
+      btn.textContent = `Preparing… ${rows.length}`;
+      if (page.length < PAGE) break;
+      // A guard against an unbounded loop if the server ever stops
+      // honouring the offset.
+      if (offset > 100000) break;
+    }
+
+    if (!rows.length){ showToast('Nothing to export yet', 'err'); return; }
+
+    // Quote every field and double any inner quotes — a creator's link
+    // name is free text and could contain a comma or a quote.
+    const esc = (v) => {
+      const str = v === null || v === undefined ? '' : String(v);
+      return '"' + str.replace(/"/g, '""') + '"';
+    };
+    const header = ['Date','Settled at','Status','Amount requested','Amount settled',
+                    'Link','Payer cost %','Method','Location','Invoice ID','Lightning invoice','Checked'];
+    const lines = [header.map(esc).join(',')];
+    for (const r of rows){
+      lines.push([
+        r.created_at, r.settled_at || '', r.status,
+        r.amount_requested, r.amount_settled ?? '',
+        r.link_name || r.link_slug || '',
+        r.surcharge_percent ?? '',
+        r.method,
+        [r.customer_city, r.customer_country].filter(Boolean).join(' '),
+        r.btcpay_invoice_id || '', r.lightning_invoice || '',
+        r.marked_at ? 'yes' : 'no',
+      ].map(esc).join(','));
+    }
+
+    // BOM so Excel opens UTF-8 correctly instead of mangling accents.
+    const blob = new Blob(['\ufeff' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `boltpay-payments-${new Date().toISOString().slice(0,10)}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    showToast(`Exported ${rows.length} payments`, 'ok');
+  } catch (e) {
+    console.error('exportPayments failed:', e);
+    showToast('Export failed — see the browser console', 'err');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = original;
+  }
+}
+
+async function loadMorePayments(btn){
+  btn.disabled = true;
+  try { await fetchPayments(true); }
+  finally { btn.disabled = false; }
+}
+
+async function fetchWithdrawals(){
+  // Explicitly bounded. Already newest-first, so the cap drops the oldest
+  // — the harmless direction — but stating it means the limit is a
+  // decision rather than PostgREST's invisible default.
+  const { data } = await window.supabaseClient.from('withdrawals').select('*')
+    .eq('user_id', currentUser.id).order('requested_at', { ascending:false }).limit(200);
+  allWithdrawals = data || [];
+  computeStats(); renderWithdrawals();
+}
+
+async function refreshBalance(){
+  const { data, error } = await window.supabaseClient.rpc('get_my_totals');
+  if (error) return;
+  const row = Array.isArray(data) ? data[0] : data;
+  if (row){
+    serverAvailable     = Math.max(0, parseFloat(row.available || 0));
+    serverEarned        = parseFloat(row.earned || 0);
+    serverWithdrawn     = parseFloat(row.withdrawn || 0);
+    serverSettledCount  = Number(row.settled_count || 0);
+    serverPendingCount  = Number(row.pending_count || 0);
+  }
+  computeStats();
+  renderTiers();
+}
+
+function computeStats(){
+  // Every figure below comes from get_my_totals(), which counts in the
+  // database. Deriving them from allPayments looked equivalent and was
+  // not: that array stops at 1000 rows, so the totals quietly shrank for
+  // exactly the creators who earn the most.
+  const earned = serverEarned;
+  const settledCount = serverSettledCount;
+  const pendingCount = serverPendingCount;
+  const withdrawn = serverWithdrawn;
+  const available = serverAvailable;
+
+  document.getElementById('statEarned').textContent = '$' + earned.toFixed(2);
+  document.getElementById('statEarnedCount').textContent = settledCount;
+  document.getElementById('statPending').textContent = pendingCount;
+  document.getElementById('statAvailable').textContent = '$' + available.toFixed(2);
+  document.getElementById('statAvailableUSD').textContent = '$' + available.toFixed(2);
+  document.getElementById('statAvailableUSD2').textContent = '$' + available.toFixed(2);
+  document.getElementById('statWithdrawn').textContent = '$' + withdrawn.toFixed(2);
+  document.getElementById('statWdCount').textContent = allWithdrawals.filter(w => w.status === 'pending').length + ' pending requests';
+
+  // Mirror into the secondary chip values inside the meter card
+  const earnedB = document.getElementById('statEarned_b'); if (earnedB) earnedB.textContent = '$' + earned.toFixed(2);
+  const earnedCountB = document.getElementById('statEarnedCount_b'); if (earnedCountB) earnedCountB.textContent = settledCount;
+
+  const pct = earned > 0 ? Math.min(1, available / earned) : 0;
+  const pctText = Math.round(pct * 100) + '%';
+  document.getElementById('meterArc').setAttribute('stroke-dashoffset', String(163 * (1 - pct)));
+  document.getElementById('chargePercent').textContent = pctText;
+  document.getElementById('chargeProgressFill').style.width = pctText;
+  document.getElementById('chargeAvailableMeta').textContent = '$' + available.toFixed(2) + ' available';
+  document.getElementById('chargeEarnedMeta').textContent = '$' + earned.toFixed(2) + ' earned';
+}
+
+function fmtDate(str){ return new Date(str).toLocaleString([], { month:'short', day:'numeric', hour:'2-digit', minute:'2-digit' }); }
+
+function withinTimeFilter(createdAt, filter){
+  if (!filter) return true;
+  const created = new Date(createdAt); const now = new Date();
+  if (filter === 'today') return created.toDateString() === now.toDateString();
+  if (filter === '7d'){ const s = new Date(now); s.setDate(s.getDate()-7); return created >= s; }
+  if (filter === '30d'){ const s = new Date(now); s.setDate(s.getDate()-30); return created >= s; }
+  return true;
+}
+
+/**
+* A short, unfiltered glance at the most recent payments — Overview's
+* "what just happened" panel. Deliberately not the same component as the
+* Transactions tab's expandable cards: no marking, no copy buttons, no
+* filters. Tapping a row just opens Transactions properly rather than
+* growing this into a second, smaller version of it.
+*/
+function renderRecentActivity(){
+  const el = document.getElementById('recentActivityList');
+  if (!el) return;
+  const recent = allPayments.slice(0, 6);
+  if (!recent.length){ el.innerHTML = '<div class="empty-state">No payments yet</div>'; return; }
+  el.innerHTML = recent.map(p => `
+    <div class="mini-pay-row" onclick="showSection('income', document.querySelector('.tab-btn[data-sec=income]'))">
+      <div style="min-width:0;">
+        <div class="mini-pay-amt">$${parseFloat(p.amount_requested || 0).toFixed(2)}</div>
+        <div class="mini-pay-meta">${escapeHtml((p.method || 'lightning').toUpperCase())} \u00b7 ${fmtDate(p.created_at)}</div>
+      </div>
+      <span class="mini-pay-badge ${escapeAttr(p.status)}">${escapeHtml(p.status)}</span>
+    </div>`).join('');
+}
+
+function renderPayments(){
+  const container = document.getElementById('paymentsList');
+  const search = (document.getElementById('txSearch')?.value || '').trim().toLowerCase();
+  const statusFilter = document.getElementById('txStatusFilter')?.value || '';
+  const timeFilter = document.getElementById('txTimeFilter')?.value || '';
+  const markFilter = document.getElementById('txMarkFilter')?.value || '';
+
+  const filtered = allPayments.filter(p => {
+    if (statusFilter && p.status !== statusFilter) return false;
+    const isMarked = !!(paymentMarks[p.id] || localMarks[p.id]);
+    if (markFilter === 'marked' && !isMarked) return false;
+    if (markFilter === 'unmarked' && isMarked) return false;
+    if (!withinTimeFilter(p.created_at, timeFilter)) return false;
+    if (search){
+      const ln = (p.lightning_invoice || '').toLowerCase(); const inv = (p.btcpay_invoice_id || '').toLowerCase();
+      if (!ln.includes(search) && !inv.includes(search)) return false;
+    }
+    return true;
+  });
+
+  if (!filtered.length){ container.innerHTML = `<div class="empty-state">No payment records found</div>`; return; }
+  container.innerHTML = filtered.map(p => {
+    const location = [p.customer_city, p.customer_country].filter(Boolean).join(', ') || 'Unknown location';
+    const inv = p.btcpay_invoice_id || '\u2014';
+    const shortInv = inv.length > 15 ? inv.slice(0, 8) + '...' + inv.slice(-7) : (inv || '\u2014');
+    const ln = p.lightning_invoice || '';
+    const shortLn = ln.length > 25 ? ln.slice(0, 16) + '...' + ln.slice(-10) : ln;
+    // get_my_payments returns these flat rather than as a nested join.
+    const surcharge = p.surcharge_percent;
+
+    const staffMark = paymentMarks[p.id];
+    const localMark = localMarks[p.id];
+    const isMarked = !!(staffMark || localMark);
+
+    const markLine = staffMark
+      ? `<div class="mark-line">\u2713 Checked by ${staffMark.marked_by_self ? 'you' : escapeHtml(staffMark.marked_by_name || 'staff')}${staffMark.mark_note ? ' \u2014 ' + escapeHtml(staffMark.mark_note) : ''}</div>`
+      : (localMark
+        ? `<div class="mark-line">\u2713 Locally marked \u00b7 ${fmtDate(localMark.at)}${localMark.note === 'bulk' ? ' (bulk)' : ''}</div>`
+        : '');
+
+    const localToggle = `<label class="mark-box ${localMark ? 'checked' : ''}" onclick="event.stopPropagation(); event.preventDefault(); toggleLocalMark('${escapeAttr(p.id)}')">
+      <span class="tick">${localMark ? '\u2713' : ''}</span>
+      <span>${localMark ? 'Marked' : 'Mark'}</span>
+    </label>`;
+
+    const markBtn = p.status === 'settled'
+      ? (staffMark
+          ? `<button class="tx-btn unmark" onclick="unmarkPayment('${escapeAttr(p.id)}', this)">Remove staff mark</button>`
+          : `<button class="tx-btn mark" onclick="markChecked('${escapeAttr(p.id)}', this)">Staff mark</button>`)
+      : '';
+
+    const settledField = (p.status === 'settled' && p.amount_settled != null)
+      ? `<div class="pay-field"><div class="pay-field-label">Amount settled</div><div class="pay-field-value" style="color:var(--ok);">$${parseFloat(p.amount_settled).toFixed(2)}</div></div>`
+      : '';
+    const settledAtField = (p.status === 'settled' && p.settled_at)
+      ? `<div class="pay-field"><div class="pay-field-label">Settled at</div><div class="pay-field-value">${fmtDate(p.settled_at)}</div></div>`
+      : '';
+
+    // Every field admin/moderator show now shows here too: nothing was
+    // left out, it is just one tap away instead of always open, so a long
+    // list still fits several rows per screen.
+    const detailsInner = `
+      <div class="pay-grid">
+        <div class="pay-field">
+          <div class="pay-field-label">Link &amp; payer cost</div>
+          <div class="pay-field-value">\ud83c\udf0e ${escapeHtml(p.link_name || p.link_slug || '\u2014')}${surcharge != null ? ` <span class="cost-chip">${parseFloat(surcharge)}%</span>` : ''}</div>
+        </div>
+        <div class="pay-field">
+          <div class="pay-field-label">Method</div>
+          <div class="pay-field-value">${escapeHtml((p.method||'lightning').toUpperCase())}</div>
+        </div>
+        <div class="pay-field">
+          <div class="pay-field-label">Created</div>
+          <div class="pay-field-value">${fmtDate(p.created_at)}</div>
+        </div>
+        <div class="pay-field">
+          <div class="pay-field-label">Location</div>
+          <div class="pay-field-value">\ud83d\udccd ${escapeHtml(location)}</div>
+        </div>
+        ${settledField}
+        ${settledAtField}
+        <div class="pay-field wide">
+          <div class="pay-field-label">Invoice ID</div>
+          <div class="pay-field-value with-copy"><span>${escapeHtml(shortInv)}</span>${inv !== '\u2014' ? `<button class="copy-mini" data-copy="${escapeAttr(inv)}">copy</button>` : ''}</div>
+        </div>
+        ${ln ? `<div class="pay-field wide"><div class="pay-field-label">Lightning invoice</div><div class="pay-field-value with-copy"><span>${escapeHtml(shortLn)}</span><button class="copy-mini" data-copy="${escapeAttr(ln)}">copy</button></div></div>` : ''}
+      </div>
+      ${markLine}
+      <div class="pay-actions">${localToggle}${markBtn}</div>`;
+
+    return `
+      <div class="pay-row${isMarked ? ' is-marked' : ''}" ${p.status === 'new' || p.status === 'pending' ? `data-expires="${escapeAttr(p.expires_at)}"` : ''} onclick="togglePayRow(this, event)">
+        <div class="pay-summary">
+          <div style="min-width:0;">
+            <div class="pay-amt">$${parseFloat(p.amount_requested||0).toFixed(2)}</div>
+            <div class="pay-meta">${escapeHtml((p.method||'lightning').toUpperCase())} \u00b7 ${fmtDate(p.created_at)}</div>
+          </div>
+          <div class="pay-summary-right">
+            <div class="pay-status">
+              <span class="badge ${escapeAttr(p.status)}"><span class="badge-dot"></span>${escapeHtml(p.status)}</span>
+              ${(p.status === 'new' || p.status === 'pending') ? '<div class="pay-timer mono" data-timer>--:--</div>' : ''}
+            </div>
+            <div class="pay-caret">\u203a</div>
+          </div>
+        </div>
+        <div class="pay-details">${detailsInner}</div>
+      </div>`;
+  }).join('');
+  tickPaymentTimers();
+  // Every call site that refreshes the full list (initial load, a mark
+  // toggle, realtime updates) keeps Overview's preview in sync for free.
+  renderRecentActivity();
+}
+
+// Tap the summary to expand/collapse. Ignores taps that started inside a
+// button, the copy chip, or the local-mark toggle, so those still work
+// without also collapsing the row they live in.
+function togglePayRow(row, ev){
+  if (ev.target.closest('button, .mark-box')) return;
+  row.classList.toggle('open');
+}
+
+async function loadDailySettled(){
+  const box = document.getElementById('dailyCurrent');
+  const list = document.getElementById('dailyList');
+  const { data, error } = await window.supabaseClient.rpc('my_daily_settled', { p_days: 14 });
+  if (error){ box.innerHTML = `<div class="empty-state">${escapeHtml(error.message)}</div>`; return; }
+
+  const rows = data || [];
+  if (!rows.length){ box.innerHTML = '<div class="empty-state">Nothing settled yet</div>'; list.innerHTML = ''; return; }
+
+  const maxVal = Math.max(...rows.map(r => parseFloat(r.settled || 0)), 1);
+  const today = rows[0];
+  box.innerHTML = `
+    <div class="dc-label">Current cycle \u00b7 started ${fmtDate(today.cycle_start)}</div>
+    <div class="dc-total">$${parseFloat(today.settled).toFixed(2)}</div>
+    <div class="dc-sub">${today.payment_count} settled payment${today.payment_count == 1 ? '' : 's'} this cycle</div>`;
+
+  list.innerHTML = rows.slice(1).map(r => {
+    const pct = Math.max(4, (parseFloat(r.settled || 0) / maxVal) * 100);
+    const label = new Date(r.cycle_start).toLocaleDateString([], { month:'short', day:'numeric' });
+    return `
+      <div class="daily-row">
+        <div class="daily-date">${label}</div>
+        <div class="daily-bar-wrap"><div class="daily-bar" style="width:${pct}%;"></div></div>
+        <div class="daily-total">$${parseFloat(r.settled).toFixed(2)}</div>
+      </div>`;
+  }).join('') || '<div class="empty-state">No earlier cycles yet</div>';
+}
+
+function tickPaymentTimers(){
+  document.querySelectorAll('.tx-row[data-expires], .pay-row[data-expires]').forEach(row => {
+    const secondsLeft = Math.max(0, Math.floor((new Date(row.getAttribute('data-expires')) - new Date()) / 1000));
+    const el = row.querySelector('[data-timer]');
+    if (el){ el.textContent = `${String(Math.floor(secondsLeft/60)).padStart(2,'0')}:${String(secondsLeft%60).padStart(2,'0')}`; el.classList.toggle('urgent', secondsLeft < 300); }
+  });
+}
+
+function renderWithdrawals(){
+  const c = document.getElementById('withdrawalsList');
+  if (!allWithdrawals.length){ c.innerHTML = '<div class="empty-state">No withdrawal history</div>'; return; }
+  c.innerHTML = allWithdrawals.map(w => `<div class="tx-row"><div class="tx-top"><div>
+    <div class="tx-amt" style="color:var(--alert);">-$${parseFloat(w.amount_after_fee||0).toFixed(2)}</div>
+    <div class="tx-meta-row">${safeMethod(w.method)} · ${fmtDate(w.requested_at)}</div></div>
+    <span class="badge ${escapeHtml(w.status)}"><span class="badge-dot"></span>${escapeHtml(w.status)}</span></div></div>`).join('');
+}
+
+function toggleInvoiceInput() {
+  const method = document.getElementById('wdMethod')?.value;
+  const invoiceRow = document.getElementById('invoiceRow');
+  const invoiceInput = document.getElementById('wdInvoice');
+  const help = document.getElementById('invoiceHelpText');
+  if (method === 'lightning') {
+    invoiceRow.style.display = 'flex';
+    // Prefill the saved Lightning Address so the common case is one tap.
+    // Still editable — a one-off bolt11 invoice remains perfectly valid,
+    // it just can't be the saved default because it expires.
+    const saved = (document.getElementById('wallet_lightning_address')?.value || '').trim();
+    if (invoiceInput && !invoiceInput.value && saved) invoiceInput.value = saved;
+    if (help) {
+      help.style.display = 'block';
+      help.textContent = saved
+        ? 'Using your saved Lightning Address. Paste a bolt11 invoice instead if you prefer.'
+        : 'Paste a bolt11 invoice, or save a Lightning Address above to have this filled in automatically.';
+    }
+  } else {
+    invoiceRow.style.display = 'none';
+    if(invoiceInput) invoiceInput.value = '';
+    if(help) help.style.display = 'none';
+  }
+}
+
+document.getElementById('wdAmount').addEventListener('input', function(e) {
+  const amt = parseFloat(e.target.value);
+  const feeStr = document.getElementById('statFee').textContent.replace('%','');
+  const fee = parseFloat(feeStr) || 3.0;
+  const help = document.getElementById('invoiceHelpText');
+  const methodDropdown = document.getElementById('wdMethod');
+
+  if (amt >= 5 && methodDropdown && methodDropdown.value === 'lightning') {
+    const afterFee = (amt * (1 - fee/100)).toFixed(2);
+    help.textContent = `Fee is ${fee}%. Please create a Lightning Invoice for exactly $${afterFee} USD.`;
+    help.style.display = 'block';
+  } else if (help) {
+    help.style.display = 'none';
+  }
+});
+
+async function submitWithdrawal(){
+  const amt = parseFloat(document.getElementById('wdAmount').value);
+  const method = document.getElementById('wdMethod')?.value;
+  const invoice = document.getElementById('wdInvoice')?.value.trim();
+  const available = serverAvailable;
+  const btn = document.getElementById('withdrawBtn');
+
+  if (!amt || amt < 5) return showToast('Minimum withdrawal is $5', 'err');
+  if (amt > available) return showToast('Insufficient balance', 'err');
+
+  let destination = "";
+  if (method === 'lightning') {
+    if (!isAutoWithdrawEnabled) return showToast('Method unavailable', 'err');
+    if (!invoice) return showToast('Lightning Invoice is required', 'err');
+    destination = invoice;
+  } else {
+    destination = document.getElementById('wallet_' + method).value.trim();
+    if (!destination) return showToast('Please save your wallet details first', 'err');
+  }
+
+  btn.disabled = true; btn.textContent = 'Processing...';
+  const { data: { session } } = await window.supabaseClient.auth.getSession();
+
+  try {
+    const res = await fetch(`${window.SUPABASE_URL}/functions/v1/user-withdraw`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session.access_token}` },
+      body: JSON.stringify({ amount: amt, method: method, destination: destination })
+    });
+    const result = await res.json();
+    if (!res.ok) showToast(result.error || 'Failed', 'err');
+    else {
+      showToast(result.msg || 'Success', 'ok');
+      document.getElementById('wdAmount').value = '';
+      if(document.getElementById('wdInvoice')) document.getElementById('wdInvoice').value = '';
+      await fetchWithdrawals();
+      await refreshBalance();
+    }
+  } catch(e) { showToast('Network error', 'err'); }
+  btn.disabled = false; btn.textContent = 'Submit request';
+}
+
+// === MESSAGES LOGIC ===
+async function loadMessages(){
+  // Newest-first with an explicit cap, then reversed for display.
+  //
+  // This used to sort ascending with no limit, which PostgREST caps at
+  // 1000 — so a long thread would have kept the OLDEST thousand messages
+  // and silently hidden every recent one. That is the wrong direction for
+  // a conversation: the newest messages are the ones that matter.
+  const MSG_LIMIT = 300;
+  const { data: newestFirst } = await window.supabaseClient
+    .from('support_messages').select('*')
+    .eq('user_id', currentUser.id)
+    .order('created_at', { ascending: false })
+    .limit(MSG_LIMIT);
+  const raw = (newestFirst || []).slice().reverse();
+  const data = (raw || []).filter(m => m.deleted_by_creator !== true);
+  const list = document.getElementById('messagesList');
+  const unread = (data || []).filter(m => m.sender === 'admin' && !m.read_by_creator).length;
+  const badge = document.getElementById('msgBadge');
+  badge.textContent = unread; badge.classList.toggle('show', unread > 0);
+  if (!data || !data.length){ list.innerHTML = '<div class="empty-state">No messages yet</div>'; return; }
+  list.innerHTML = data.map(m => {
+    const isMine = m.sender === 'creator'; const editing = editingMessageId === m.id;
+    return `<div class="msg-bubble ${m.sender}"><div class="msg-from">${m.sender === 'admin' ? 'Boltpay Team' : 'You'}</div>
+      ${editing ? `<input class="msg-edit-input" id="editInput_${m.id}" value="${escapeAttr(m.message)}">
+        <div class="msg-actions"><button class="msg-act" onclick="saveMessageEdit('${m.id}')">Save</button><button class="msg-act" onclick="cancelEdit()">Cancel</button></div>`
+      : `${escapeHtml(m.message)}<div class="msg-time">${fmtDate(m.created_at)}${m.edited_at ? ' · edited' : ''}</div>
+        ${isMine ? `<div class="msg-actions"><button class="msg-act" onclick="startEdit('${m.id}')">Edit</button><button class="msg-act danger" onclick="deleteMessage('${m.id}')">Delete</button></div>` : ''}`}</div>`;
+  }).join('');
+  list.scrollTop = list.scrollHeight;
+  // Mark-as-read: shudhu unread admin message thakle-i UPDATE chalay, ar
+  // shudhu sei unread row gulo te. Age prottek loadMessages() call e puro
+  // thread e bulk UPDATE chole jeto — admin panel / auto-refresh / Realtime
+  // event ek sathe same row lock nite giye Postgres deadlock (40P01) ar
+  // statement timeout (57014) hocchilo. Ekhon unread 0 hole kono UPDATE e
+  // cholbe na, ar thakle-o idx_messages_creator_unread index er karone
+  // deterministic order e lock hoy — deadlock er bodole worst case e chhoto
+  // wait. Fail korle-o message rendering bondho hobe na, tai catch rakha.
+  if (unread > 0) {
+    try {
+      await window.supabaseClient.from('support_messages').update({ read_by_creator: true })
+        .eq('user_id', currentUser.id).eq('sender', 'admin').eq('read_by_creator', false);
+    } catch (e) { console.warn('mark-as-read skipped:', e); }
+  }
+}
+
+function startEdit(id){ editingMessageId = id; loadMessages(); }
+function cancelEdit(){ editingMessageId = null; loadMessages(); }
+async function saveMessageEdit(id){
+  const text = document.getElementById('editInput_' + id)?.value.trim();
+  if (!text) return showToast('Message cannot be empty', 'err');
+  const { error } = await window.supabaseClient.from('support_messages').update({ message: text, edited_at: new Date().toISOString() }).eq('id', id).eq('sender', 'creator');
+  if (error) return showToast('Failed: ' + error.message, 'err');
+  editingMessageId = null; showToast('Message updated', 'ok'); await loadMessages();
+}
+async function deleteMessage(id){
+  // Hidden from this view, not erased. Support threads are the record of
+  // what was agreed about money, so neither side gets to remove a line
+  // from the other's copy.
+  if (!confirm('Hide this message from your view?')) return;
+  const { error } = await window.supabaseClient.rpc('hide_message', { p_message_id: id });
+  if (error) return showToast('Failed: ' + error.message, 'err');
+  showToast('Message hidden', 'ok');
+  await loadMessages();
+}
+async function clearMyThread(){
+  if (!confirm('Clear the entire message history? This cannot be undone.')) return;
+  const { error } = await window.supabaseClient.rpc('clear_message_thread', { p_user_id: currentUser.id });
+  if (!error){ showToast('History cleared', 'ok'); await loadMessages(); }
+}
+async function sendReply(){
+  const text = document.getElementById('replyInput').value.trim();
+  if (!text) return;
+  const { error } = await window.supabaseClient.from('support_messages').insert({ user_id: currentUser.id, sender: 'creator', message: text });
+  if (error) return showToast('Failed: ' + error.message, 'err');
+  document.getElementById('replyInput').value = ''; await loadMessages();
+}
+
+function showSection(sec, btn){
+  const target = document.getElementById('sec-' + sec);
+  if (!target) return;
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+  target.classList.add('active');
+
+
+  if (sec === 'messages') loadMessages();
+  if (sec === 'daily') loadDailySettled();
+  if (sec === 'earnings') loadInsights();
+}
+
+/**
+* 7-day / 30-day revenue and conversion rate. Lazily loaded — only fetched
+* once the Earnings tab is actually opened, same as Daily settled and
+* Messages already are.
+*/
+async function loadInsights(){
+  const { data, error } = await window.supabaseClient.rpc('get_my_insights');
+  if (error){ showToast('Failed to load insights: ' + error.message, 'err'); return; }
+  const row = Array.isArray(data) ? data[0] : data;
+  if (!row) return;
+
+  document.getElementById('insRevenue7d').textContent  = '$' + parseFloat(row.revenue_7d || 0).toFixed(2);
+  document.getElementById('insRevenue30d').textContent = '$' + parseFloat(row.revenue_30d || 0).toFixed(2);
+
+  const total = Number(row.total_invoices || 0);
+  const paid = Number(row.paid_invoices || 0);
+  const pct = total > 0 ? Math.round((paid / total) * 100) : 0;
+  document.getElementById('insConversion').textContent = pct + '%';
+  document.getElementById('insConversionSub').textContent = `${paid} of ${total} invoice${total === 1 ? '' : 's'} paid`;
+}
+
+function openInitialSection(){
+  // Live payments are the landing view, same as the admin panel's own
+  // default tab — a creator opening the dashboard should see activity
+  // first, not a stat summary they already glanced at on the last visit.
+  const requested = (window.location.hash || '').replace(/^#/, '').toLowerCase();
+  const known = ['overview','income','links','daily','earnings','cashout','messages'];
+  const section = known.includes(requested) ? requested : 'income';
+  const btn = document.querySelector(`.tab-btn[data-sec="${section}"]`);
+  showSection(section, btn);
+}
+
+function subscribeToDashboardUpdates(){
+  if (paymentRealtimeChannel) window.supabaseClient.removeChannel(paymentRealtimeChannel);
+  if (withdrawalRealtimeChannel) window.supabaseClient.removeChannel(withdrawalRealtimeChannel);
+  if (messageRealtimeChannel) window.supabaseClient.removeChannel(messageRealtimeChannel);
+
+  paymentRealtimeChannel = window.supabaseClient
+    .channel('creator-payments-' + currentUser.id)
+    .on('postgres_changes', {
+      event: '*', schema: 'public', table: 'payments',
+      filter: `user_id=eq.${currentUser.id}`,
+    }, async () => {
+      await fetchMarks();
+      await Promise.all([fetchPayments(), refreshBalance()]);
+    })
+    .subscribe((status) => {
+      const statusEl = document.getElementById('creatorLiveStatus');
+      if (!statusEl) return;
+      statusEl.textContent = status === 'SUBSCRIBED' ? 'Live sync' : 'Reconnecting…';
+      statusEl.classList.toggle('offline', status !== 'SUBSCRIBED');
+      const statusEl2 = document.getElementById('creatorLiveStatus2');
+      if (statusEl2){
+        statusEl2.textContent = status === 'SUBSCRIBED' ? 'Live sync' : 'Reconnecting…';
+        statusEl2.classList.toggle('offline', status !== 'SUBSCRIBED');
+      }
+    });
+
+  withdrawalRealtimeChannel = window.supabaseClient
+    .channel('creator-withdrawals-' + currentUser.id)
+    .on('postgres_changes', {
+      event: '*', schema: 'public', table: 'withdrawals',
+      filter: `user_id=eq.${currentUser.id}`,
+    }, async () => {
+      await Promise.all([fetchWithdrawals(), refreshBalance()]);
+    })
+    .subscribe();
+
+  messageRealtimeChannel = window.supabaseClient
+    .channel('creator-messages-' + currentUser.id)
+    .on('postgres_changes', {
+      event: '*', schema: 'public', table: 'support_messages',
+      filter: `user_id=eq.${currentUser.id}`,
+    }, () => loadMessages())
+    .subscribe();
+}
+
+function showToast(msg, type){
+  const t = document.getElementById('toast'); t.textContent = msg; t.className = 'toast ' + type; t.style.display = 'block';
+  setTimeout(() => { t.style.display = 'none'; }, 3000);
+}
+
+async function logoutUser(){
+  if (paymentRealtimeChannel) window.supabaseClient.removeChannel(paymentRealtimeChannel);
+  if (withdrawalRealtimeChannel) window.supabaseClient.removeChannel(withdrawalRealtimeChannel);
+  if (messageRealtimeChannel) window.supabaseClient.removeChannel(messageRealtimeChannel);
+  if (paymentTickInterval) clearInterval(paymentTickInterval);
+  if (creatorDataRefreshInterval) clearInterval(creatorDataRefreshInterval);
+  await window.supabaseClient.auth.signOut();
+  window.location.href = 'login.html';
+}
+
+init();
+</script>
+  </body>
+</html>
