@@ -229,6 +229,11 @@ payment_link_id: link.link_id,
 user_id: link.user_id,
 btcpay_invoice_id: btcpayInvoice.id,
 method: "lightning",
+// NEW: buyer পেমেন্ট পেজে যা টাইপ করেছিল, markup যোগ হওয়ার আগে।
+// শুধু display-এর জন্য (get_invoice_public, get_my_payments ইত্যাদি
+// RPC ফাংশন এটা পড়ে) — BTCPay-কে পাঠানো amount, balance বা
+// accounting-এর কোনো হিসাবে এটা ব্যবহার হয় না।
+buyer_amount: amount,
 // What the payer is actually being asked for, and therefore what the
 // owner is credited when it settles. The link's face value plus their
 // own markup — not the face value, or the two would disagree the moment
