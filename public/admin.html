@@ -568,6 +568,18 @@ input:focus-visible,select:focus-visible,button:focus-visible{ outline:2px solid
                                   <button class="btn-primary" style="flex:0 0 auto;" onclick="saveDetailCost()">Save cost %</button>
                                 </div>
                                 <div class="hint" style="font-size:11px; color:var(--text-faint); margin-top:6px;">Added on top of every payment link this user owns. At 3%, a $100 link invoices the payer $103.00 and credits them $103.00. They can change this themselves up to the platform ceiling; setting it here overrides whatever they chose.</div>
+
+                                <div class="detail-section-title">Amount display for this creator</div>
+                                <div class="w-row">
+                                  <select class="w-input" id="detailAmountDisplaySelect">
+                                    <option value="default">Use global default</option>
+                                    <option value="buyer">Always show buyer-typed amount</option>
+                                    <option value="fee">Always show fee-included amount</option>
+                                  </select>
+                                  <button class="btn-primary" style="flex:0 0 auto;" onclick="saveDetailAmountDisplay()">Save</button>
+                                </div>
+                                <div class="hint" style="font-size:11px; color:var(--text-faint); margin-top:6px;">উপরের global switch-কে override করে, শুধু এই creator-এর জন্য। "Use global default" নির্বাচন করলে override মুছে যাবে।</div>
+
                                 <div class="detail-section-title">Withdrawal fee for this creator</div>
                                 <div class="w-row">
                                   <input type="number" step="0.1" class="w-input" id="detailFeeInput" placeholder="3.0">
@@ -838,6 +850,12 @@ input:focus-visible,select:focus-visible,button:focus-visible{ outline:2px solid
                                                         <button class="btn-ghost" style="padding:8px 12px; font-size:11px;" onclick="saveHideSmallThreshold()">Save</button>
                                                       </span>
                                                     </div>
+
+                                                    <label class="toggle-row" style="margin-top:14px;">
+                                                      <input type="checkbox" id="globalShowBuyerAmount" onchange="saveGlobalToggle('show_buyer_amount_enabled', this)">
+                                                      <span>Show buyer-typed amount (not the fee-included total)</span>
+                                                    </label>
+                                                    <div class="hint" style="font-size:11px; color:var(--text-faint); margin:4px 0 0;">On (default): সব জায়গায় (receipt, dashboard, admin panel, moderator panel, home feed) buyer যে amount টাইপ করেছে সেটাই দেখাবে। Fee/markup পূর্ণভাবে চার্জ হচ্ছে এবং balance-এ যুক্ত হচ্ছে, শুধু headline amount হিসেবে দেখানো হচ্ছে না। Off: সব জায়গায় fee-সহ পূর্ণ amount দেখাবে। নির্দিষ্ট কোনো creator-এর জন্য এটা override করতে চাইলে Customers থেকে করুন।</div>
                                                   </div>
 
                                                   <div class="panel">
@@ -1316,9 +1334,13 @@ async function openCustomerDetail(creatorId){
   document.getElementById('wBkash').textContent = cu.w_bkash || '—';
   document.getElementById('wNagad').textContent = cu.w_nagad || '—';
 
-  const { data: profileRow } = await window.supabaseClient.from('profiles').select('withdrawal_fee_percent, cost_percent').eq('id', creatorId).single();
+  const { data: profileRow } = await window.supabaseClient.from('profiles').select('withdrawal_fee_percent, cost_percent, show_buyer_amount_override').eq('id', creatorId).single();
   document.getElementById('detailFeeInput').value = profileRow?.withdrawal_fee_percent ?? 3;
   document.getElementById('detailCostInput').value = profileRow?.cost_percent ?? 0;
+  const amtMode = profileRow?.show_buyer_amount_override === true ? 'buyer'
+               : profileRow?.show_buyer_amount_override === false ? 'fee'
+               : 'default';
+  document.getElementById('detailAmountDisplaySelect').value = amtMode;
   document.getElementById('detailLimitInput').value = cu.max_links ?? 5;
 
   const { data: models } = await window.supabaseClient.from('payment_links').select('id, slug, display_name').eq('user_id', creatorId);
@@ -1362,6 +1384,14 @@ async function saveDetailCost(){
   const { error } = await window.supabaseClient.rpc('admin_set_cost_percent', { p_user_id: currentDetailCreatorId, p_percent: pct });
   showToast(error ? 'Failed: ' + error.message : 'Cost updated', error ? 'err' : 'ok');
   if (!error) await loadCustomers();
+}
+
+async function saveDetailAmountDisplay(){
+  const mode = document.getElementById('detailAmountDisplaySelect').value;
+  const { error } = await window.supabaseClient.rpc('admin_set_creator_amount_display', {
+    p_creator_id: currentDetailCreatorId, p_mode: mode
+  });
+  showToast(error ? 'Failed: ' + error.message : 'Amount display updated', error ? 'err' : 'ok');
 }
 
 async function saveDetailFee(){
@@ -2057,12 +2087,14 @@ async function loadSettings(){
   const feed = data?.find(s => s.key === 'public_feed_enabled')?.value;
   const hideSmall = data?.find(s => s.key === 'hide_small_payments_enabled')?.value;
   const hideSmallAmt = data?.find(s => s.key === 'hide_small_payments_threshold')?.value;
+  const showBuyerAmount = data?.find(s => s.key === 'show_buyer_amount_enabled')?.value;
   const support = data?.find(s => s.key === 'support_links')?.value || {};
   const setChecked = (id, v) => { const e = document.getElementById(id); if (e) e.checked = v === true; };
   setChecked('globalManualWithdrawals', manual);
   setChecked('globalAutoWithdraw', auto);
   setChecked('globalPublicFeed', feed);
   setChecked('globalHideSmall', hideSmall);
+  setChecked('globalShowBuyerAmount', showBuyerAmount);
   const thresholdEl = document.getElementById('hideSmallThreshold');
   if (thresholdEl) thresholdEl.value = (hideSmallAmt !== undefined && hideSmallAmt !== null) ? hideSmallAmt : 10;
   const setVal = (id, v) => { const e = document.getElementById(id); if (e) e.value = v || ''; };
