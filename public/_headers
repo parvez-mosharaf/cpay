@@ -20,7 +20,8 @@
 #       host for a year, so a later `http://` link or a hostile network
 #       cannot downgrade a payment page. includeSubDomains covers
 #       pay.* and any other host in the zone.
-#       NOT using `preload`: that ships the domain into browsers'\n#       hard-coded HSTS list, and removal takes months. Worth adding only
+#       NOT using `preload`: that ships the domain into browsers'
+#       hard-coded HSTS list, and removal takes months. Worth adding only
 #       once every subdomain is certain to be HTTPS-only forever.
 
 /*
