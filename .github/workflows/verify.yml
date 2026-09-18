@@ -115,6 +115,10 @@ jobs:
           # 22 rather than 20: GitHub now warns that actions targeting
           # Node 20 are deprecated, and node --check behaves identically.
           node-version: '22'
+      - name: Install npm dependencies
+        run: npm install --no-audit --no-fund
+      - name: Build browser assets
+        run: npm run build
       - name: Static checks
         run: python3 ci/check_frontend.py
 

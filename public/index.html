@@ -19,6 +19,7 @@
             <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
             <script src="config.js"></script>
             <script src="theme.js"></script>
+            <script src="assets/home-analytics.js"></script>
             <style>
 /* Same family as the payment page and the link previews: near-black with
    Cash App green as the single accent. --amber keeps its name so every
@@ -219,7 +220,7 @@ async function routeRootDomain(){
     }
 
     document.getElementById('redirectNotice').style.display = 'flex';
-    window.location.replace(`https://${primary.hostname}/`);
+    window.location.replace(`{{https://${primary.hostname}}}/`);
     return true;
   } catch (e) {
     console.error('domain routing check failed', e);
@@ -243,7 +244,7 @@ window.addEventListener('DOMContentLoaded', async () => {
 
 function esc(str){
   return String(str ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;')
-    .replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+    .replace(/\"/g,'&quot;').replace(/'/g,'&#39;');
 }
 
 function ago(ts){
