@@ -6,11 +6,13 @@ or script for Foundry calls and keep its credentials out of `public/`.
 
 ## One-time local authentication
 
-The Azure Developer CLI is installed and authenticated for the current user.
-To authenticate again after the token expires:
+If needed, install the Azure Developer CLI (`azd`) using the official
+Microsoft instructions. Run `azd auth login`, then verify the signed-in
+account with:
 
 ```powershell
 azd auth login
+azd auth login --check-status
 ```
 
 The Azure CLI is also supported by the Azure identity libraries:
