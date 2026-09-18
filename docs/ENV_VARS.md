@@ -68,6 +68,13 @@ policy or a `SECURITY DEFINER` function in `supabase/migrations/`.
 the top. Same reasoning as above: safe to keep there, or move to Worker
 environment variables under Settings → Variables if you prefer.
 
+## Microsoft Foundry (local development only)
+
+Foundry credentials must stay server-side. Do not add an API key, Azure access
+token, or Foundry endpoint to `public/config.js`. See
+[`FOUNDRY-LOCAL.md`](FOUNDRY-LOCAL.md) for the `azd` login flow and the
+server-side environment variables used by a local proxy.
+
 ## Rotation
 
 If any of these has ever been committed, pushed or pasted into a shared
