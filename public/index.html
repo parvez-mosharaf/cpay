@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>Boltpay — Lightning payments for creators</title>
-        <meta name="description" content="Get paid from Cash App. Share your payment link and they pay from your Cash balance — no crypto to buy, no signup needed to pay.">
+        <meta name="description" content="Get paid from Cash App. Share your payment link and they pay from their Cash balance — no crypto to buy, no signup needed to pay.">
 
         <!-- No og: tags here on purpose.
              They need absolute URLs, and a static file cannot know which
@@ -12,7 +12,7 @@
              here would be a hardcoded guess that goes stale the moment you
              add or rename a domain.
              worker/og-preview-worker.js builds them per request from the
-             real hostname, for the home page exactly as it already
+             real hostname instead, for the home page exactly as it already
              does for payment links. -->
         <link rel="icon" type="image/svg+xml" href="/favicon.svg">
           <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
@@ -244,7 +244,7 @@ window.addEventListener('DOMContentLoaded', async () => {
 
 function esc(str){
   return String(str ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;')
-    .replace(/>/g,'&gt;').replace(/\"/g,'&quot;').replace(/'/g,'&#39;');
+    .replace(/\"/g,'&quot;').replace(/'/g,'&#39;');
 }
 
 function ago(ts){
