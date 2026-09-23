@@ -1,0 +1,12 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "cpay-telegram-intelligence",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-09-21",
+  "workers_dev": true,
+  "ai": { "binding": "AI" },
+  "vars": {
+    "AI_MODEL": "@cf/meta/llama-3.1-8b-instruct",
+    "TELEGRAM_REPORT_URL": "https://riumaeihemgznvgattoc.supabase.co/functions/v1/telegram-report"
+  }
+}
