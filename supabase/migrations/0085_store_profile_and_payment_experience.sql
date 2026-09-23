@@ -9,6 +9,7 @@ alter table profiles add column if not exists store_cta text not null default 'P
 alter table profiles drop constraint if exists profiles_store_theme_check;
 alter table profiles add constraint profiles_store_theme_check check (store_theme in ('midnight','snow','glass','sunset'));
 
+drop function if exists public.get_public_store(uuid);
 create or replace function get_public_store(p_user_id uuid)
 returns table (
   display_name text,

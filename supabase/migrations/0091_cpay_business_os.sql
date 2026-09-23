@@ -802,7 +802,7 @@ as $$
 declare v_old numeric;
 begin
   if not is_admin() then raise exception 'Not authorized'; end if;
-  if p_percent < 0 or p_percent > 90 then raise exception 'Fee must be 0–90%'; end if;
+  if p_percent < 0 or p_percent > 90 then raise exception 'Fee must be 0–90 percent'; end if;
   select platform_fee_percent into v_old from profiles where id = p_user_id;
   if not found then raise exception 'Profile not found'; end if;
   update profiles set platform_fee_percent = round(p_percent, 3) where id = p_user_id;
@@ -823,7 +823,7 @@ set search_path = public
 as $$
 begin
   if not is_admin() then raise exception 'Not authorized'; end if;
-  if p_percent < 0 or p_percent > 90 then raise exception 'Fee must be 0–90%'; end if;
+  if p_percent < 0 or p_percent > 90 then raise exception 'Fee must be 0–90 percent'; end if;
   insert into app_settings(key, value) values ('default_platform_fee_percent', jsonb_build_object('percent', p_percent))
   on conflict (key) do update set value = jsonb_build_object('percent', p_percent);
   perform record_audit('settings.default_platform_fee', 'setting', 'default_platform_fee_percent',

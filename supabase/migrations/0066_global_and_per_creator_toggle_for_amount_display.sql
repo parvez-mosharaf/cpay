@@ -123,6 +123,7 @@ grant execute on function admin_set_creator_amount_display(uuid, text) to authen
 -- ============================================================
 -- 5. get_invoice_public() — success/receipt page
 -- ============================================================
+drop function if exists public.get_invoice_public(uuid);
 create or replace function get_invoice_public(p_payment_id uuid)
 returns table (
   id uuid,

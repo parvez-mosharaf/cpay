@@ -66,6 +66,7 @@ grant execute on function request_withdrawal(numeric, text, text) to authenticat
 -- get_invoice_public — public invoice status lookup.
 -- Returns only display-safe fields, never user_id or raw ids.
 -- =========================================================
+drop function if exists public.get_invoice_public(uuid);
 create or replace function get_invoice_public(p_payment_id uuid)
 returns table (
 id uuid,

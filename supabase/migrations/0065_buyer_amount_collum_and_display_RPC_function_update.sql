@@ -37,6 +37,7 @@ comment on column payments.buyer_amount is
 -- ============================================================
 -- 1. get_invoice_public() — success/receipt পেজ
 -- ============================================================
+drop function if exists public.get_invoice_public(uuid);
 create or replace function get_invoice_public(p_payment_id uuid)
 returns table (
   id uuid,

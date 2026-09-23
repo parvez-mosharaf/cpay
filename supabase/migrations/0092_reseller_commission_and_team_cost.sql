@@ -135,7 +135,7 @@ set search_path = public
 as $$
 begin
   if not is_admin() then raise exception 'Not authorized'; end if;
-  if p_percent < 0 or p_percent > 50 then raise exception 'Commission must be 0–50%'; end if;
+  if p_percent < 0 or p_percent > 50 then raise exception 'Commission must be 0–50 percent'; end if;
   if not exists (select 1 from profiles where id = p_reseller_id and role = 'moderator') then
     raise exception 'Reseller not found';
   end if;
@@ -156,7 +156,7 @@ set search_path = public
 as $$
 begin
   if not is_admin() then raise exception 'Not authorized'; end if;
-  if p_percent < 0 or p_percent > 50 then raise exception 'Commission must be 0–50%'; end if;
+  if p_percent < 0 or p_percent > 50 then raise exception 'Commission must be 0–50 percent'; end if;
   insert into app_settings(key,value) values ('default_reseller_commission_percent', jsonb_build_object('percent', p_percent))
   on conflict (key) do update set value = jsonb_build_object('percent', p_percent);
   return p_percent;

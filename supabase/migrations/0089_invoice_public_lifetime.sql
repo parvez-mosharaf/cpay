@@ -1,5 +1,6 @@
 -- CPAY 0089: bound anonymous historical invoice lookup
 -- Active invoices remain public; expired/settled receipts remain discoverable for 90 days.
+drop function if exists public.get_invoice_public(uuid);
 create or replace function public.get_invoice_public(p_payment_id uuid)
 returns table (id uuid, amount_requested numeric, amount_settled numeric, method text, status text, expires_at timestamptz, merchant_name text, link_slug text, lightning_invoice text)
 language sql security definer stable set search_path=public as $$
