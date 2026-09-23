@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0b0f0c">
+  <title>CPAY — Payment design preview</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon-payment.svg">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=JetBrains+Mono:wght@600;700&display=swap" rel="stylesheet">
+  <style>
+    :root{--bg:#0b0f0c;--panel:#131916;--panel-hi:#1a221d;--line:rgba(255,255,255,.10);--text:#f2f7f3;--dim:rgba(242,247,243,.58);--green:#00d632;--on:#04240d}
+    *{box-sizing:border-box}html,body{margin:0;min-height:100%;font-family:'Space Grotesk',sans-serif;background:var(--bg);color:var(--text)}
+    body{padding:28px 18px 48px;background:radial-gradient(circle at 50% -8%,rgba(0,214,50,.15),transparent 42%),var(--bg)}
+    .page{max-width:1050px;margin:auto}.top{display:flex;justify-content:space-between;align-items:center;gap:14px;margin-bottom:24px}
+    .brand{display:flex;align-items:center;gap:10px;font-weight:700}.mark{width:34px;height:34px;border-radius:10px;background:linear-gradient(145deg,#00d632,#9bd31a);display:grid;place-items:center;color:#04240d}
+    .eyebrow{color:var(--green);font-size:10px;font-weight:800;letter-spacing:.12em;text-transform:uppercase}.title{font-size:clamp(24px,4vw,38px);margin:10px 0 6px}.sub{color:var(--dim);font-size:13px;line-height:1.5;max-width:570px}
+    .layout{display:grid;grid-template-columns:minmax(220px,1fr) minmax(300px,420px);gap:24px;align-items:start}
+    .panel{background:rgba(19,25,22,.92);border:1px solid var(--line);border-radius:18px;padding:16px}.panel-title{font-weight:700;font-size:14px}.panel-sub{font-size:11px;color:var(--dim);margin-top:3px}
+    .theme-list{display:grid;gap:8px;margin-top:15px}.theme-option{width:100%;display:flex;align-items:center;justify-content:space-between;text-align:left;gap:12px;background:var(--panel-hi);border:1px solid var(--line);border-radius:11px;color:var(--text);padding:11px;cursor:pointer}
+    .theme-option.active{border-color:var(--green);box-shadow:0 0 0 1px rgba(0,214,50,.24)}.theme-option strong{display:block;font-size:12px}.theme-option span{display:block;color:var(--dim);font-size:10px;margin-top:3px}.theme-dot{width:28px;height:28px;border-radius:8px;flex:0 0 auto;background:var(--green)}
+    .phone-wrap{display:flex;justify-content:center}.phone{width:min(100%,360px);min-height:650px;border-radius:30px;padding:16px;box-shadow:0 24px 60px rgba(0,0,0,.35);background:#0b1710;color:#effff2;border:1px solid rgba(255,255,255,.12)}
+    .phone-top{display:flex;justify-content:space-between;align-items:center;font-weight:700;font-size:13px}.avatar{width:29px;height:29px;border-radius:50%;display:grid;place-items:center;background:rgba(0,214,50,.18);color:var(--green);border:1px solid rgba(0,214,50,.35)}
+    .merchant{margin-top:18px;text-align:center;border:1px solid rgba(255,255,255,.12);border-radius:18px;padding:16px;background:rgba(255,255,255,.035)}.secure{display:inline-block;background:var(--green);color:var(--on);padding:5px 13px;border-radius:999px;font-size:10px;font-weight:800}.merchant-avatar{width:54px;height:54px;border-radius:16px;display:grid;place-items:center;margin:10px auto 8px;background:var(--green);color:var(--on);font-size:28px;font-weight:700}.merchant-name{font-weight:700;font-size:19px}.merchant-sub{font-size:10px;color:rgba(239,255,242,.58);margin-top:4px}
+    .amount{font:700 72px 'JetBrains Mono';text-align:center;margin:34px 0 24px;letter-spacing:-5px}.keypad{display:grid;grid-template-columns:repeat(3,1fr);gap:5px}.key{border:0;background:rgba(255,255,255,.035);color:inherit;border-radius:9px;padding:13px 5px;font-size:23px}.quick{width:100%;border:1px solid rgba(255,255,255,.12);background:rgba(255,255,255,.04);color:inherit;border-radius:11px;padding:12px;margin-top:5px;font-weight:700}.pay{width:100%;border:0;background:var(--green);color:var(--on);border-radius:12px;padding:14px;margin-top:10px;font-size:16px;font-weight:800}.nav{display:flex;justify-content:space-between;align-items:center;margin-top:26px;color:rgba(239,255,242,.64);font-size:12px}.nav-center{width:43px;height:43px;border-radius:50%;display:grid;place-items:center;background:var(--green);color:var(--on);font-size:22px}
+    html[data-theme="classic"] .phone{background:#f3faf5;color:#102018}html[data-theme="classic"] .merchant{background:#fff;border-color:#d3e3d7}html[data-theme="classic"] .secure{background:#0d1b11;color:#8dffa8}html[data-theme="classic"] .merchant-avatar{background:#0d1b11;color:#8dffa8}html[data-theme="classic"] .merchant-sub,html[data-theme="classic"] .nav{color:rgba(16,32,24,.58)}html[data-theme="classic"] .amount{margin:32px 0 27px}html[data-theme="classic"] .key{background:#eaf4ed}html[data-theme="classic"] .quick{background:#d7ecdc;color:#0d6526;border-color:#b8d9c0}html[data-theme="classic"] .pay{background:#0d1b11;color:#8dffa8}
+    html[data-theme="tile"] .phone{background:#050a07}html[data-theme="tile"] .merchant{background:rgba(0,0,0,.14)}html[data-theme="tile"] .key{background:rgba(255,255,255,.16);border-radius:6px}html[data-theme="tile"] .pay{background:rgba(0,0,0,.32);color:#fff}
+    html[data-theme="focus"] .phone{background:#101912}html[data-theme="focus"] .merchant{background:rgba(255,255,255,.04)}html[data-theme="focus"] .amount{margin:24px 0 18px;font-size:64px}html[data-theme="focus"] .key{background:transparent;padding:10px 5px}html[data-theme="focus"] .pay{background:#00d632;color:#04240d}
+    html[data-theme="receipt"]{background:#eaf2ec}html[data-theme="receipt"] body{background:#eaf2ec;color:#102016}html[data-theme="receipt"] .phone{background:#eaf2ec;color:#102016;border-color:#d1e1d5}html[data-theme="receipt"] .merchant{background:#fff;border-color:#d1e1d5}html[data-theme="receipt"] .secure{background:#0d1b11;color:#8dffa8}html[data-theme="receipt"] .merchant-avatar{background:#0d1b11;color:#8dffa8}html[data-theme="receipt"] .merchant-sub,html[data-theme="receipt"] .nav{color:rgba(16,32,24,.58)}html[data-theme="receipt"] .key{background:#f5fbf6;color:#102016}html[data-theme="receipt"] .quick{background:#d7ecdc;color:#0d6526;border-color:#b8d9c0}html[data-theme="receipt"] .pay{background:#0d1b11;color:#8dffa8}
+    @media(max-width:700px){body{padding:18px 12px 34px}.layout{grid-template-columns:1fr}.phone{min-height:610px}.top{margin-bottom:18px}}
+  </style>
+</head>
+<body>
+  <main class="page">
+    <div class="top"><div class="brand"><span class="mark">⚡</span><span>CPAY design studio</span></div><span class="eyebrow">Payment link preview</span></div>
+    <div class="eyebrow">Customer-facing layouts</div>
+    <h1 class="title">Choose a payment experience that fits your brand.</h1>
+    <p class="sub">Preview the five CPAY layouts before you create a link. The selected design is only a visual layout; payment security and server-side controls stay the same.</p>
+    <section class="layout">
+      <div class="panel"><div class="panel-title">Available designs</div><div class="panel-sub">Select a layout to update the live preview.</div><div class="theme-list" id="themeList"></div></div>
+      <div class="phone-wrap"><div class="phone"><div class="phone-top"><span>Amina Studio</span><span class="avatar">A</span></div><div class="merchant"><span class="secure">✓ Secure Payment</span><div class="merchant-avatar">A</div><div class="merchant-name">Amina Studio</div><div class="merchant-sub">Instant · Lightning</div></div><div class="amount">$0</div><div class="keypad"><button class="key">1</button><button class="key">2</button><button class="key">3</button><button class="key">4</button><button class="key">5</button><button class="key">6</button><button class="key">7</button><button class="key">8</button><button class="key">9</button><button class="key">·</button><button class="key">0</button><button class="key">⌫</button></div><button class="quick">Quick amount</button><button class="pay">Pay</button><div class="nav"><span>$0</span><span class="nav-center">$</span><span>◷</span></div></div></div>
+    </section>
+  </main>
+  <script>
+    const themes={keypad:['Keypad','Bold green checkout with a large numeric pad.'],classic:['Classic','Familiar amount entry with quick-select chips.'],tile:['Tile','High-contrast full-green payment experience.'],focus:['Focus','Dark glass layout with a premium, quiet feel.'],receipt:['Receipt','Bright structured checkout with transparent total.']};
+    const labels=Object.entries(themes);const params=new URLSearchParams(location.search);let current=themes[params.get('theme')]?params.get('theme'):'keypad';
+    function render(){document.documentElement.dataset.theme=current;document.getElementById('themeList').innerHTML=labels.map(([id,m])=>`<button class="theme-option ${id===current?'active':''}" onclick="current='${id}';render()"><span><strong>${m[0]}</strong><span>${m[1]}</span></span><i class="theme-dot"></i></button>`).join('');}
+    render();
+  </script>
+</body>
+</html>

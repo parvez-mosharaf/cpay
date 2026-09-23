@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CPAY — Admin</title>
+<link rel="icon" type="image/svg+xml" href="/favicon-site.svg">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="cpay.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script><script src="theme.js"></script><script src="app.js"></script>
+</head>
+<body>
+<div class="shell">
+  <aside class="side">
+    <div class="brand" style="margin-bottom:22px"><div class="mark"></div>CPAY</div>
+    <button class="navi active" data-tab="home">Command</button>
+    <button class="navi" data-tab="people">Profiles</button>
+    <button class="navi" data-tab="apps">Applications</button>
+    <button class="navi" data-tab="fees">Fees & filters</button>
+    <button class="navi" data-tab="flags">Feature switches</button>
+    <button class="navi" data-tab="alerts">Reseller alerts</button>
+    <button class="navi" data-tab="payouts">Payouts</button>
+    <button class="navi" data-tab="chat">Inbox</button>
+    <a class="navi" href="admin-classic.html">Classic ops panel</a>
+    <button class="navi" id="logoutBtn">Log out</button>
+  </aside>
+  <main class="main">
+    <div class="topbar"><div><div class="kicker">Owner</div><h2>CPAY command</h2></div><div id="toast" class="err" style="display:none"></div></div>
+    <section id="home"></section>
+    <section id="people" hidden></section>
+    <section id="apps" hidden></section>
+    <section id="fees" hidden></section>
+    <section id="flags" hidden></section>
+    <section id="alerts" hidden></section>
+    <section id="payouts" hidden></section>
+    <section id="chat" hidden></section>
+  </main>
+</div>
+
+<div id="opsGateSummary" hidden></div>
+<div id="opsGateList" hidden></div>
+<!-- Staging sign-off ledger admin_ops_release_gates admin_set_ops_release_gate -->
+<script src="admin-desk.js"></script>
+</body>
+</html>

@@ -1,0 +1,24 @@
+-- CPAY 0090: configurable operational alert thresholds
+insert into public.app_settings(key,value) values
+('admin_alert_thresholds', '{"database_warning_gb":1,"database_critical_gb":5,"pending_withdrawals_warning":20,"processing_withdrawals_warning":5,"pending_payments_warning":25,"pending_applications_info":15,"webhook_stale_minutes":30,"settlement_stale_minutes":60,"old_queue_hours":6}'::jsonb)
+on conflict (key) do nothing;
+
+create or replace function public.admin_system_alerts()
+returns jsonb language plpgsql security definer stable set search_path=public as $$
+declare a jsonb:='[]'::jsonb; t jsonb; db_bytes bigint:=pg_database_size(current_database()); pw bigint; prw bigint; pp bigint; np bigint; pa bigint; lw timestamptz; ls timestamptz; ow timestamptz; op timestamptz; rp bigint; wa numeric; sa numeric; db numeric;
+begin
+ if not is_admin() then raise exception 'Not authorized'; end if;
+ select coalesce(value,'{}'::jsonb) into t from app_settings where key='admin_alert_thresholds';
+ pw:=(select count(*) from withdrawals where status in ('pending','approved')); prw:=(select count(*) from withdrawals where status='processing'); pp:=(select count(*) from payments where status='pending'); np:=(select count(*) from payments where status='new'); pa:=(select count(*) from account_applications where status='pending'); lw:=(select max(received_at) from webhook_events); ls:=(select max(settled_at) from payments where status='settled'); ow:=(select min(requested_at) from withdrawals where status in ('pending','approved')); op:=(select min(created_at) from payments where status='pending'); rp:=(select count(*) from payments where created_at>=now()-interval '24 hours'); db:=db_bytes/1073741824.0;
+ if db >= coalesce((t->>'database_critical_gb')::numeric,5) then a:=a||jsonb_build_array(jsonb_build_object('code','db_critical','severity','critical','title','Database footprint is large','detail',round(db,2)||' GB')); elsif db >= coalesce((t->>'database_warning_gb')::numeric,1) then a:=a||jsonb_build_array(jsonb_build_object('code','db_warning','severity','warning','title','Database footprint is growing','detail',round(db,2)||' GB')); end if;
+ if pw>=coalesce((t->>'pending_withdrawals_warning')::int,20) then a:=a||jsonb_build_array(jsonb_build_object('code','withdrawal_queue','severity','warning','title','Withdrawal queue is building','detail',pw||' pending/approved withdrawals.')); end if;
+ if prw>=coalesce((t->>'processing_withdrawals_warning')::int,5) then a:=a||jsonb_build_array(jsonb_build_object('code','withdrawal_processing','severity','warning','title','Processing withdrawals need review','detail',prw||' processing.')); end if;
+ if pp>=coalesce((t->>'pending_payments_warning')::int,25) then a:=a||jsonb_build_array(jsonb_build_object('code','payment_backlog','severity','warning','title','Payment backlog is elevated','detail',pp||' pending payments.')); end if;
+ if pa>=coalesce((t->>'pending_applications_info')::int,15) then a:=a||jsonb_build_array(jsonb_build_object('code','application_queue','severity','info','title','Application queue is growing','detail',pa||' pending applications.')); end if;
+ if lw is null and rp>0 then a:=a||jsonb_build_array(jsonb_build_object('code','webhook_missing','severity','critical','title','No webhook activity recorded','detail',rp||' payments created in 24h.')); elsif lw is not null then wa:=extract(epoch from(now()-lw))/60.0; if wa>=coalesce((t->>'webhook_stale_minutes')::numeric,30) and rp>0 then a:=a||jsonb_build_array(jsonb_build_object('code','webhook_stale','severity','warning','title','Webhook activity looks stale','detail','Last webhook was '||round(wa)||' minutes ago.')); end if; end if;
+ if ls is not null then sa:=extract(epoch from(now()-ls))/60.0; if sa>=coalesce((t->>'settlement_stale_minutes')::numeric,60) and pp>0 then a:=a||jsonb_build_array(jsonb_build_object('code','settlement_stale','severity','warning','title','Settlement freshness needs review','detail','Last settlement was '||round(sa)||' minutes ago.')); end if; end if;
+ if ow is not null and extract(epoch from(now()-ow))/3600.0>=coalesce((t->>'old_queue_hours')::numeric,6) then a:=a||jsonb_build_array(jsonb_build_object('code','old_withdrawal','severity','warning','title','Withdrawal has been waiting','detail','Oldest withdrawal exceeds the configured age.')); end if;
+ if op is not null and extract(epoch from(now()-op))/3600.0>=coalesce((t->>'old_queue_hours')::numeric,6) then a:=a||jsonb_build_array(jsonb_build_object('code','old_payment','severity','warning','title','Payment has been pending','detail','Oldest pending payment exceeds the configured age.')); end if;
+ return jsonb_build_object('checked_at',now(),'alerts',a,'thresholds',t);
+end; $$;
+revoke all on function public.admin_system_alerts() from public,anon; grant execute on function public.admin_system_alerts() to authenticated;

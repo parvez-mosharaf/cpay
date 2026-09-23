@@ -1,0 +1,155 @@
+# ============================================================
+# CPAY — pre-merge verification
+# ============================================================
+# Catches the classes of mistake this project has actually hit:
+#
+#   * a migration that fails to apply (the 42P13 return-type error, which
+#     rolled back a whole file and left pages calling functions that did
+#     not exist)
+#   * a migration numbered the same as one already applied
+#   * an edge function that does not TYPE-CHECK — esbuild strips types
+#     without checking them, so it happily built code deno rejects
+#   * a page whose <script> has a syntax error, or that references an
+#     element id or handler that is not there
+#   * an rpc() call whose arguments do not match the SQL definition
+#   * customer data committed by accident
+#
+# Every one of these was found by hand at some point. This runs them on
+# every push instead.
+# ============================================================
+
+name: Verify
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  migrations:
+    name: Migrations apply to an empty database
+    runs-on: ubuntu-latest
+    # Blocking again. ci/bootstrap.sql now provides everything the
+    # migrations reach for — the supabase_realtime publication was the
+    # last missing piece, and it is what stopped the run at migration 5
+    # of 48. A migration that will not apply to an empty database is
+    # exactly the failure this job exists to catch, so it should fail
+    # the build.
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_PASSWORD: postgres
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports: ['5432:5432']
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Migration numbers are unique
+        run: |
+          dupes=$(ls supabase/migrations/*.sql | xargs -n1 basename | cut -d_ -f1 | sort | uniq -d)
+          if [ -n "$dupes" ]; then
+            echo "Duplicate migration numbers: $dupes"
+            exit 1
+          fi
+          echo "All migration numbers are unique."
+
+      - name: Install psql
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq postgresql-client
+
+      - name: Bootstrap a Supabase-shaped database
+        env:
+          PGPASSWORD: postgres
+        run: psql -h localhost -U postgres -v ON_ERROR_STOP=1 -f ci/bootstrap.sql
+
+      - name: Apply every migration in order
+        env:
+          PGPASSWORD: postgres
+        run: |
+          for f in supabase/migrations/*.sql; do
+            echo "── $(basename "$f")"
+            psql -h localhost -U postgres -v ON_ERROR_STOP=1 -q -f "$f"
+          done
+          echo "All migrations applied cleanly to an empty database."
+
+      - name: Runtime regression — overpayment cap and message soft-delete
+        env:
+          PGPASSWORD: postgres
+        run: |
+          # Exercises 0050's two fixes at the data level, not just syntax:
+          # a settlement far above amount_requested must be rejected, and
+          # clearing a thread must hide rows rather than delete them. Runs
+          # inside BEGIN/ROLLBACK against the database the migrations were
+          # just applied to, so it leaves nothing behind.
+          psql -h localhost -U postgres -v ON_ERROR_STOP=1 -f ci/cloudai_regression.sql
+
+  functions:
+    name: Edge functions type-check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: denoland/setup-deno@v1
+        with:
+          deno-version: v1.x
+      - name: deno check every function
+        run: |
+          fail=0
+          for d in supabase/functions/*/; do
+            [ -f "${d}index.ts" ] || continue
+            echo "── ${d}index.ts"
+            deno check "${d}index.ts" || fail=1
+          done
+          exit $fail
+
+  frontend:
+    name: Pages parse and reference real things
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          # 22 rather than 20: GitHub now warns that actions targeting
+          # Node 20 are deprecated, and node --check behaves identically.
+          node-version: '22'
+      - name: Install npm dependencies
+        run: npm install --no-audit --no-fund
+      - name: Build browser assets
+        run: npm run build
+      - name: Static checks
+        run: python3 ci/check_frontend.py
+
+  hygiene:
+    name: Ledger snapshots are where you expect
+    runs-on: ubuntu-latest
+    # Advisory. Keeping snapshots in this repo is a deliberate choice
+    # here — the repository is private, so the exposure is limited to
+    # people who already have access to everything else in it.
+    #
+    # It still reports, because the tradeoff is worth re-reading
+    # occasionally: the moment this repo gains a collaborator or is ever
+    # made public, those files become the most sensitive thing in it.
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - name: Report tracked ledger snapshots
+        run: |
+          if git ls-files | grep -q '^ledger-backups/'; then
+            count=$(git ls-files | grep -c '^ledger-backups/')
+            echo "NOTE: $count ledger snapshot(s) are tracked in this repository."
+            echo
+            echo "They contain withdrawal destinations and payment references."
+            echo "That is acceptable while this repo stays private and access"
+            echo "stays limited to you."
+            echo
+            echo "Before adding a collaborator, or ever making this public:"
+            echo "  1. Create a private repo, e.g. cpay-ledger"
+            echo "  2. Supabase > Edge Functions > Secrets:  GITHUB_REPO = cpay-ledger"
+            echo "  3. git rm -r --cached ledger-backups/"
+            echo "  4. git filter-repo --path ledger-backups/ --invert-paths"
+          else
+            echo "No ledger snapshots tracked."
+          fi

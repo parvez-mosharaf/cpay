@@ -1,0 +1,14 @@
+{
+  "name": "cpay",
+  "private": true,
+  "scripts": {
+    "build": "esbuild src/home-analytics.js --bundle --minify --format=iife --outfile=public/assets/home-analytics.js",
+    "prepare:upload": "node scripts/prepare-direct-upload.mjs"
+  },
+  "dependencies": {
+    "@amplitude/unified": "^1"
+  },
+  "devDependencies": {
+    "esbuild": "0.25.9"
+  }
+}

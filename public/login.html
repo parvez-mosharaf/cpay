@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CPAY — Log in</title>
+<link rel="icon" type="image/svg+xml" href="/favicon-site.svg">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="cpay.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script><script src="theme.js"></script><script src="app.js"></script>
+</head>
+<body class="auth">
+  <div class="card">
+    <div class="brand" style="margin-bottom:18px"><div class="mark"><svg width="16" height="16" viewBox="0 0 24 24"><path d="M13 2L4 14h6l-1 8 9-12h-6l1-8z" fill="#04240D"/></svg></div>CPAY</div>
+    <h1>Welcome back</h1>
+    <p class="muted">Lightning Payment Receiver Gateway</p>
+    <div class="field"><label>Email</label><input id="email" type="email" autocomplete="email"></div>
+    <div class="field"><label>Password</label><input id="password" type="password" autocomplete="current-password"></div>
+    <button class="btn primary" id="submitBtn" style="width:100%">Log in</button>
+    <p class="err" id="errorMsg" style="display:none"></p>
+    <p class="muted" style="margin-top:16px">No account? <a href="register.html">Create one</a></p>
+  </div>
+<script>
+async function go(id){
+  const { data } = await window.supabaseClient.from('profiles').select('role,account_status').eq('id', id).single();
+  if (data?.account_status && data.account_status !== 'active'){
+    await window.supabaseClient.auth.signOut();
+    const labels = {pending:'Waiting for admin approval.', rejected:'Application was not approved.', suspended:'Account suspended.'};
+    const el = document.getElementById('errorMsg'); el.textContent = labels[data.account_status] || 'Account is not active.'; el.style.display='block';
+    return;
+  }
+  location.href = roleHome(data?.role);
+}
+document.getElementById('submitBtn').onclick = async () => {
+  const email = document.getElementById('email').value.trim();
+  const password = document.getElementById('password').value;
+  const err = document.getElementById('errorMsg'); err.style.display='none';
+  if (!email || !password){ err.textContent='Enter email and password.'; err.style.display='block'; return; }
+  const btn = document.getElementById('submitBtn'); btn.disabled = true;
+  const { data, error } = await window.supabaseClient.auth.signInWithPassword({ email, password });
+  if (error){ err.textContent = error.message; err.style.display='block'; btn.disabled=false; return; }
+  await go(data.user.id);
+};
+document.getElementById('password').addEventListener('keydown', e => { if (e.key==='Enter') document.getElementById('submitBtn').click(); });
+window.addEventListener('DOMContentLoaded', async () => {
+  if (window.applyDomainTheme) await applyDomainTheme();
+  const { data:{ session } } = await window.supabaseClient.auth.getSession();
+  if (session) await go(session.user.id);
+});
+</script>
+</body></html>

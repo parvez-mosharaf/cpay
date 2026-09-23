@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CPAY — Create account</title>
+<link rel="icon" type="image/svg+xml" href="/favicon-site.svg">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="cpay.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script><script src="theme.js"></script><script src="app.js"></script>
+</head>
+<body class="auth">
+  <div class="card">
+    <div class="brand" style="margin-bottom:18px"><div class="mark"><svg width="16" height="16" viewBox="0 0 24 24"><path d="M13 2L4 14h6l-1 8 9-12h-6l1-8z" fill="#04240D"/></svg></div>CPAY</div>
+    <h1>Open a CPAY account</h1>
+    <p class="muted" id="affNote">Freelancers joining via a reseller stay on that team.</p>
+    <div class="field"><label>Display name</label><input id="displayName"></div>
+    <div class="field"><label>Account type</label>
+      <select id="requestedRole">
+        <option value="freelancer">Freelancer</option>
+        <option value="reseller">Reseller</option>
+      </select>
+    </div>
+    <div class="field"><label>Email</label><input id="email" type="email" autocomplete="email"></div>
+    <div class="field"><label>Password</label><input id="password" type="password" autocomplete="new-password"></div>
+    <div class="field" id="affField"><label>Reseller affiliate code</label><input id="affiliate" placeholder="optional"></div>
+    <button class="btn primary" id="submitBtn" style="width:100%">Create account</button>
+    <p class="err" id="errorMsg" style="display:none"></p>
+    <p class="ok" id="successMsg" style="display:none"></p>
+    <p class="muted" style="margin-top:16px">Already on CPAY? <a href="login.html">Log in</a></p>
+  </div>
+<script>
+const params = new URLSearchParams(location.search);
+if (params.get('role') === 'reseller') document.getElementById('requestedRole').value = 'reseller';
+if (params.get('ref')) document.getElementById('affiliate').value = params.get('ref');
+document.getElementById('requestedRole').addEventListener('change', () => {
+  document.getElementById('affField').style.display = document.getElementById('requestedRole').value === 'freelancer' ? 'flex' : 'none';
+});
+document.getElementById('affField').style.display = document.getElementById('requestedRole').value === 'freelancer' ? 'flex' : 'none';
+document.getElementById('submitBtn').onclick = async () => {
+  const displayName = document.getElementById('displayName').value.trim();
+  const email = document.getElementById('email').value.trim();
+  const password = document.getElementById('password').value;
+  const requestedRole = document.getElementById('requestedRole').value;
+  const affiliate = document.getElementById('affiliate').value.trim();
+  const err = document.getElementById('errorMsg'); const ok = document.getElementById('successMsg');
+  err.style.display=ok.style.display='none';
+  if (!email || !password){ err.textContent='Email and password required.'; err.style.display='block'; return; }
+  if (password.length < 8){ err.textContent='Use at least 8 characters.'; err.style.display='block'; return; }
+  const btn = document.getElementById('submitBtn'); btn.disabled = true;
+  const { data, error } = await window.supabaseClient.auth.signUp({
+    email, password,
+    options: { data: { display_name: displayName || undefined, requested_role: requestedRole, affiliate_code: affiliate || undefined } }
+  });
+  if (error){ err.textContent=error.message; err.style.display='block'; btn.disabled=false; return; }
+  if (data.session){ location.href = requestedRole === 'reseller' ? 'reseller.html' : 'dashboard.html'; return; }
+  ok.textContent = 'Application received. Confirm email, then wait for approval unless auto-approve is on.';
+  ok.style.display='block';
+};
+window.addEventListener('DOMContentLoaded', () => { if (window.applyDomainTheme) applyDomainTheme(); });
+</script>
+</body></html>

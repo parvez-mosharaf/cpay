@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CPAY — Lightning Payment Receiver Gateway</title>
+  <meta name="description" content="CPAY receives Lightning payments from Cash App and every other Lightning wallet.">
+  <link rel="icon" type="image/svg+xml" href="/favicon-site.svg">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="cpay.css">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="config.js"></script>
+  <script src="theme.js"></script>
+</head>
+<body>
+  <div class="wrap">
+    <nav class="nav">
+      <div class="brand"><div class="mark"><svg width="16" height="16" viewBox="0 0 24 24"><path d="M13 2L4 14h6l-1 8 9-12h-6l1-8z" fill="#04240D"/></svg></div>CPAY</div>
+      <div class="nav-links">
+        <a class="btn ghost" href="login.html">Log in</a>
+        <a class="btn primary" href="register.html">Open account</a>
+      </div>
+    </nav>
+    <section class="hero">
+      <div class="kicker">Lightning Payment Receiver Gateway</div>
+      <h1>Get paid from Cash App and every Lightning wallet.</h1>
+      <p>CPAY is the operating system for freelancers and resellers. Share a payment link. The payer settles from Cash App or any Lightning wallet. You withdraw to bKash, Nagad, Binance or Lightning.</p>
+      <div class="row" style="margin-top:22px">
+        <a class="btn primary" href="register.html?role=freelancer">Join as Freelancer</a>
+        <a class="btn ghost" href="register.html?role=reseller">Join as Reseller</a>
+      </div>
+    </section>
+    <section class="grid 3" style="padding-bottom:70px">
+      <div class="card"><div class="kicker">01</div><h3>Receive first</h3><p class="muted">Cash App already holds Lightning. They scan your CPAY link. The ledger credits USD.</p></div>
+      <div class="card"><div class="kicker">02</div><h3>Real reseller teams</h3><p class="muted">Affiliate links create freelancer accounts under the reseller — not a borrowed URL.</p></div>
+      <div class="card"><div class="kicker">03</div><h3>Operator control</h3><p class="muted">Per-person fees, feature flags, emergency stops, 5pm Dhaka Telegram/Discord digest.</p></div>
+    </section>
+    <footer class="site">CPAY</footer>
+  </div>
+  <script>
+    window.addEventListener('DOMContentLoaded', async () => {
+      if (window.applyDomainTheme) await applyDomainTheme();
+      const { data: { session } } = await window.supabaseClient.auth.getSession();
+      if (!session) return;
+      const { data } = await window.supabaseClient.from('profiles').select('role,account_status').eq('id', session.user.id).single();
+      if (data?.account_status === 'active') location.href = data.role === 'admin' ? 'admin.html' : data.role === 'moderator' ? 'reseller.html' : 'dashboard.html';
+    });
+  </script>
+</body>
+</html>

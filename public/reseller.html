@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CPAY — Reseller</title>
+<link rel="icon" type="image/svg+xml" href="/favicon-site.svg">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="cpay.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script><script src="theme.js"></script><script src="app.js"></script>
+</head>
+<body>
+<div class="shell">
+  <aside class="side">
+    <div class="brand" style="margin-bottom:22px"><div class="mark"></div>CPAY</div>
+    <button class="navi active" data-tab="home">Overview</button>
+    <button class="navi" data-tab="team">Team accounts</button>
+    <button class="navi" data-tab="links">My links</button>
+    <button class="navi" data-tab="cash">Withdraw</button>
+    <button class="navi" data-tab="notice">Notices</button>
+    <button class="navi" data-tab="chat">Chat</button>
+    <button class="navi" data-tab="profile">Profile</button>
+    <button class="navi" id="logoutBtn">Log out</button>
+  </aside>
+  <main class="main">
+    <div class="topbar"><div><div class="kicker">Reseller</div><h2 id="hello">Desk</h2></div><div id="toast" class="err" style="display:none"></div></div>
+    <section id="home"></section>
+    <section id="team" hidden></section>
+    <section id="links" hidden></section>
+    <section id="cash" hidden></section>
+    <section id="notice" hidden></section>
+    <section id="chat" hidden></section>
+    <section id="profile" hidden></section>
+  </main>
+</div>
+<script src="reseller-desk.js"></script>
+</body>
+</html>
